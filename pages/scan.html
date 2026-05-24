@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Scanner — GCC SmartCheck</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <style>
+    .scan-body { max-width: 1100px; margin: 0 auto; padding: 32px 24px; width: 100%;
+      display: grid; grid-template-columns: 1fr 380px; gap: 28px; align-items: start; }
+
+    .scanner-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .scanner-header h2 { display: flex; align-items: center; gap: 8px; font-size: 1.375rem; }
+    .scanner-header h2 i { color: var(--primary); }
+
+    .scanner-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 20px; }
+    .scanner-toolbar { display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .scanner-status { display: flex; align-items: center; gap: 6px; font-size: .8125rem; font-weight: 600; }
+    .scanner-status-dot { width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-muted); transition: var(--transition); }
+    .scanner-status-dot.active { background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(16,185,129,.2); animation: pulse 1.5s ease infinite; }
+
+    #reader { width: 100%; background: #0f172a; min-height: 320px; position: relative; }
+    #reader video { width: 100% !important; }
+    #reader img   { display: none !important; }
+    #reader__scan_region { border: none !important; }
+    #reader__dashboard   { display: none !important; }
+
+    .scan-overlay-wrap { position: absolute; inset: 0; display: flex;
+      align-items: center; justify-content: center; pointer-events: none; }
+    .scan-frame-box { width: 220px; height: 220px; position: relative; }
+    .corner { position: absolute; width: 28px; height: 28px; border-color: var(--accent); border-style: solid; }
+    .corner.tl { top:0;    left:0;  border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+    .corner.tr { top:0;    right:0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+    .corner.bl { bottom:0; left:0;  border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+    .corner.br { bottom:0; right:0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+    .scan-laser { position: absolute; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      animation: laserMove 2s ease-in-out infinite; }
+    @keyframes laserMove { 0%{top:5%} 50%{top:90%} 100%{top:5%} }
+
+    .scanner-idle { display: flex; flex-direction: column; align-items: center;
+      justify-content: center; min-height: 320px; gap: 12px; color: rgba(255,255,255,.4); }
+    .scanner-idle i { font-size: 3.5rem; }
+    .scanner-idle p { font-size: .9375rem; }
+
+    .session-bar { display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+      background: var(--surface-2); border-radius: var(--radius-md); border: 1px solid var(--border);
+      margin-bottom: 20px; flex-wrap: wrap; }
+    .session-bar-item { display: flex; align-items: center; gap: 6px;
+      font-size: .8125rem; color: var(--text-secondary); }
+    .session-bar-item i { color: var(--primary); }
+    .session-bar-item strong { color: var(--text-primary); }
+    .session-bar-divider { width: 1px; height: 16px; background: var(--border); }
+
+    .attendance-col { position: sticky; top: 88px; }
+    .attendance-panel { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); overflow: hidden; }
+    .attendance-panel-header { display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .attendance-panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 1rem; }
+    .attendance-panel-header h3 i { color: var(--primary); }
+    .attendance-count { font-size: .75rem; font-weight: 700; background: var(--primary-light);
+      color: var(--primary); padding: 3px 10px; border-radius: 999px; }
+
+    .attendance-scroll { max-height: 420px; overflow-y: auto; padding: 12px; }
+    .attendance-scroll::-webkit-scrollbar { width: 4px; }
+    .attendance-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .att-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+      border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 8px;
+      animation: slideUp .25s ease; background: var(--surface); }
+    .att-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--primary-light);
+      color: var(--primary); display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: .8125rem; flex-shrink: 0; }
+    .att-info { flex: 1; min-width: 0; }
+    .att-info .att-name { font-weight: 600; font-size: .875rem; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; }
+    .att-info .att-time { font-size: .7rem; color: var(--text-muted); }
+    .att-check { color: var(--accent); font-size: 1.1rem; flex-shrink: 0; }
+
+    .attendance-empty { text-align: center; padding: 40px 20px; color: var(--text-muted); }
+    .attendance-empty i { font-size: 2.5rem; display: block; margin-bottom: 8px; }
+    .attendance-empty p { font-size: .875rem; }
+
+    .attendance-panel-footer { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+    .attendance-panel-footer .btn { flex: 1; }
+
+    @media (max-width: 900px) {
+      .scan-body { grid-template-columns: 1fr; }
+      .attendance-col { position: static; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="dashboard.html" class="navbar-brand">
+    <img src="../logo.png" alt="GCC SmartCheck" onerror="this.style.display='none'" />
+    <span>GCC <strong>SmartCheck</strong></span>
+    <span class="brand-dot"></span>
+  </a>
+  <ul class="navbar-nav">
+    <li><a href="dashboard.html"><i class="ph ph-squares-four"></i> Dashboard</a></li>
+    <li><a href="scan.html" class="active"><i class="ph ph-scan"></i> Scan</a></li>
+    <li><a href="#" onclick="logout()" style="color:var(--danger)"><i class="ph ph-sign-out"></i> Sign Out</a></li>
+  </ul>
+</nav>
+
+<div class="scan-body fade-in">
+
+  <!-- Scanner column -->
+  <div class="scanner-col">
+    <div class="scanner-header">
+      <h2><i class="ph ph-scan"></i> QR Scanner</h2>
+      <a href="dashboard.html" class="btn btn-ghost btn-sm"><i class="ph ph-arrow-left"></i> Dashboard</a>
+    </div>
+
+    <div class="session-bar">
+      <div class="session-bar-item"><i class="ph ph-books"></i><span>Course: <strong id="bar-course">—</strong></span></div>
+      <div class="session-bar-divider"></div>
+      <div class="session-bar-item"><i class="ph ph-chalkboard"></i><span>Module: <strong id="bar-module">—</strong></span></div>
+      <div class="session-bar-divider"></div>
+      <div class="session-bar-item"><i class="ph ph-calendar"></i><span>Date: <strong id="bar-date">—</strong></span></div>
+      <div style="flex:1"></div>
+      <a href="dashboard.html" class="btn btn-ghost btn-sm"><i class="ph ph-gear"></i> Configure</a>
+    </div>
+
+    <div id="no-session-alert" class="alert alert-warning hidden" style="margin-bottom:16px">
+      <i class="ph ph-warning"></i>
+      <span>No session configured. <a href="dashboard.html" style="color:inherit;font-weight:700">Set up a session</a> before scanning.</span>
+    </div>
+
+    <div class="scanner-card">
+      <div class="scanner-toolbar">
+        <div class="scanner-status">
+          <div class="scanner-status-dot" id="status-dot"></div>
+          <span id="status-text">Camera off</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" id="start-btn" onclick="startScanner()">
+            <i class="ph ph-play"></i> Start Camera
+          </button>
+          <button class="btn btn-ghost btn-sm hidden" id="stop-btn" onclick="stopScanner()">
+            <i class="ph ph-stop"></i> Stop
+          </button>
+        </div>
+      </div>
+      <div style="position:relative">
+        <div id="reader">
+          <div class="scanner-idle" id="scanner-idle">
+            <i class="ph ph-camera-slash"></i>
+            <p>Press "Start Camera" to begin scanning</p>
+          </div>
+        </div>
+        <div class="scan-overlay-wrap hidden" id="scan-overlay">
+          <div class="scan-frame-box">
+            <div class="corner tl"></div><div class="corner tr"></div>
+            <div class="corner bl"></div><div class="corner br"></div>
+            <div class="scan-laser"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manual entry -->
+    <div class="card card-sm">
+      <h3 style="display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:.9375rem">
+        <i class="ph ph-keyboard" style="color:var(--primary)"></i> Manual Entry
+      </h3>
+      <div style="display:flex;gap:10px">
+        <div class="input-group" style="flex:1">
+          <i class="ph ph-hash input-icon"></i>
+          <input type="text" id="manual-id" class="form-control" placeholder="Enter student ID (gcc-…)" />
+        </div>
+        <button class="btn btn-primary" onclick="manualMark()"><i class="ph ph-check"></i> Mark</button>
+      </div>
+      <p class="form-hint">Use this if the camera isn't available or the QR code is damaged.</p>
+    </div>
+  </div>
+
+  <!-- Attendance column -->
+  <div class="attendance-col">
+    <div class="attendance-panel">
+      <div class="attendance-panel-header">
+        <h3><i class="ph ph-list-checks"></i> Present Today</h3>
+        <span class="attendance-count" id="present-count">0</span>
+      </div>
+      <div class="attendance-scroll" id="attendance-list">
+        <div class="attendance-empty">
+          <i class="ph ph-users"></i>
+          <p>No students marked yet.<br />Start scanning to see them here.</p>
+        </div>
+      </div>
+      <div class="attendance-panel-footer">
+        <button class="btn btn-ghost btn-sm" onclick="exportScanCSV()"><i class="ph ph-file-csv"></i> Export CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearScanList()"><i class="ph ph-trash"></i> Clear</button>
+      </div>
+    </div>
+
+    <div class="card card-sm mt-16">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="font-size:.9375rem;display:flex;align-items:center;gap:6px">
+          <i class="ph ph-chart-bar" style="color:var(--primary)"></i> Session Summary
+        </h3>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="text-align:center;padding:12px;background:var(--surface-2);border-radius:var(--radius-sm)">
+          <div style="font-size:1.5rem;font-weight:700;color:var(--accent)" id="sum-present">0</div>
+          <div style="font-size:.75rem;color:var(--text-muted)">Present</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:var(--surface-2);border-radius:var(--radius-sm)">
+          <div style="font-size:1.5rem;font-weight:700;color:var(--danger)" id="sum-absent">0</div>
+          <div style="font-size:.75rem;color:var(--text-muted)">Absent</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+<script>initScanner();</script>
+</body>
+</html>

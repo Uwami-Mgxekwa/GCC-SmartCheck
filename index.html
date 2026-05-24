@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GCC SmartCheck — Attendance System</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
+  <style>
+    .landing-wrap {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    /* ── Left hero ── */
+    .landing-hero {
+      background: linear-gradient(145deg, #1e3a8a 0%, #1d4ed8 50%, #2563eb 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 56px;
+      position: relative;
+      overflow: hidden;
+    }
+    .landing-hero::before {
+      content: ''; position: absolute;
+      width: 500px; height: 500px; border-radius: 50%;
+      background: rgba(255,255,255,.04); top: -120px; right: -120px;
+    }
+    .landing-hero::after {
+      content: ''; position: absolute;
+      width: 300px; height: 300px; border-radius: 50%;
+      background: rgba(255,255,255,.04); bottom: -80px; left: -80px;
+    }
+
+    .hero-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 56px; }
+    .hero-logo img { height: 40px; filter: brightness(0) invert(1); }
+    .hero-logo-text { font-size: 1.25rem; font-weight: 700; color: #fff; letter-spacing: -.02em; }
+    .hero-logo-text span { color: #93c5fd; }
+
+    .hero-tagline { font-size: 2.5rem; font-weight: 700; color: #fff; line-height: 1.2;
+      letter-spacing: -.03em; margin-bottom: 20px; }
+    .hero-tagline span { color: #93c5fd; }
+
+    .hero-desc { font-size: 1rem; color: rgba(255,255,255,.7); line-height: 1.7;
+      max-width: 380px; margin-bottom: 48px; }
+
+    .hero-features { display: flex; flex-direction: column; gap: 14px; }
+    .hero-feature { display: flex; align-items: center; gap: 12px;
+      color: rgba(255,255,255,.85); font-size: .9375rem; }
+    .hero-feature-icon { width: 36px; height: 36px; background: rgba(255,255,255,.12);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 1rem; color: #93c5fd; }
+
+    /* ── Right auth ── */
+    .landing-auth { display: flex; align-items: center; justify-content: center;
+      padding: 60px 56px; background: var(--surface-2); }
+    .auth-box { width: 100%; max-width: 420px; }
+    .auth-header { margin-bottom: 32px; }
+    .auth-header h2 { font-size: 1.75rem; margin-bottom: 6px; }
+
+    .role-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+      margin-bottom: 28px; background: var(--surface-3); padding: 4px;
+      border-radius: var(--radius-sm); }
+    .role-tab { display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 10px; border-radius: 6px; font-size: .875rem; font-weight: 600;
+      cursor: pointer; transition: var(--transition); color: var(--text-secondary);
+      border: none; background: transparent; font-family: inherit; }
+    .role-tab.active { background: var(--surface); color: var(--primary); box-shadow: var(--shadow-sm); }
+    .role-tab i { font-size: 1rem; }
+
+    .forgot-link { font-size: .8125rem; color: var(--text-muted); text-align: right;
+      display: block; margin-top: -12px; margin-bottom: 20px; }
+    .forgot-link:hover { color: var(--primary); }
+
+    .auth-footer { text-align: center; margin-top: 24px; font-size: .875rem; color: var(--text-secondary); }
+    .auth-footer a { font-weight: 600; }
+
+    @media (max-width: 900px) {
+      .landing-wrap { grid-template-columns: 1fr; }
+      .landing-hero { display: none; }
+      .landing-auth { padding: 40px 24px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="landing-wrap">
+
+  <!-- Hero -->
+  <div class="landing-hero">
+    <div class="hero-logo">
+      <img src="logo.png" alt="GCC SmartCheck" onerror="this.style.display='none'" />
+      <span class="hero-logo-text">GCC <span>SmartCheck</span></span>
+    </div>
+    <h1 class="hero-tagline">Smart Attendance<br />for <span>Modern Campuses</span></h1>
+    <p class="hero-desc">QR-powered attendance tracking that works entirely in the browser. No servers, no apps — just scan and go.</p>
+    <div class="hero-features">
+      <div class="hero-feature">
+        <div class="hero-feature-icon"><i class="ph ph-qr-code"></i></div>
+        <span>Instant QR code generation per student</span>
+      </div>
+      <div class="hero-feature">
+        <div class="hero-feature-icon"><i class="ph ph-camera"></i></div>
+        <span>Live camera scanning — no app needed</span>
+      </div>
+      <div class="hero-feature">
+        <div class="hero-feature-icon"><i class="ph ph-export"></i></div>
+        <span>Export attendance to CSV in one click</span>
+      </div>
+      <div class="hero-feature">
+        <div class="hero-feature-icon"><i class="ph ph-lock-simple"></i></div>
+        <span>Fully offline — data stays on your device</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auth -->
+  <div class="landing-auth">
+    <div class="auth-box fade-in">
+      <div class="auth-header">
+        <h2>Welcome back</h2>
+        <p>Sign in to your account to continue</p>
+      </div>
+
+      <div class="role-tabs">
+        <button class="role-tab active" id="tab-lecturer" onclick="switchRole('lecturer')">
+          <i class="ph ph-chalkboard-teacher"></i> Lecturer
+        </button>
+        <button class="role-tab" id="tab-student" onclick="switchRole('student')">
+          <i class="ph ph-student"></i> Student
+        </button>
+      </div>
+
+      <div id="login-alert" class="hidden"></div>
+
+      <form id="login-form" onsubmit="handleLogin(event)">
+        <div class="form-group" id="username-group">
+          <label class="form-label">Username</label>
+          <div class="input-group">
+            <i class="ph ph-user input-icon"></i>
+            <input type="text" id="username" class="form-control" placeholder="Enter your username" autocomplete="username" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <div class="input-group">
+            <i class="ph ph-lock-simple input-icon"></i>
+            <input type="password" id="password" class="form-control" placeholder="Enter your password" autocomplete="current-password" />
+            <i class="ph ph-eye input-icon-right" id="toggle-pw" onclick="togglePassword()"></i>
+          </div>
+        </div>
+        <a href="#" class="forgot-link">Forgot password?</a>
+        <button type="submit" class="btn btn-primary btn-block btn-lg" id="login-btn">
+          <i class="ph ph-sign-in"></i> Sign In
+        </button>
+      </form>
+
+      <div class="divider">or</div>
+
+      <a href="pages/register.html" class="btn btn-ghost btn-block">
+        <i class="ph ph-user-plus"></i> Register as a Student
+      </a>
+
+      <div class="auth-footer">
+        New student? <a href="pages/register.html">Create your account</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast-container"></div>
+<script src="js/app.js"></script>
+<script>
+  window.currentRole = 'lecturer';
+  initLogin();
+</script>
+</body>
+</html>

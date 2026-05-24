@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Registration — GCC SmartCheck</title>
+  <link rel="stylesheet" href="../css/style.css" />
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    .reg-body {
+      display: grid;
+      grid-template-columns: 1fr 420px;
+      gap: 0;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 24px;
+      width: 100%;
+      align-items: start;
+    }
+    .reg-form-col { padding-right: 40px; }
+    .reg-sidebar { position: sticky; top: 88px; }
+
+    .step-indicator { display: flex; align-items: center; margin-bottom: 32px; }
+    .step { display: flex; align-items: center; gap: 8px; font-size: .8125rem;
+      font-weight: 600; color: var(--text-muted); }
+    .step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-3);
+      border: 2px solid var(--border); display: flex; align-items: center; justify-content: center;
+      font-size: .75rem; font-weight: 700; transition: var(--transition); }
+    .step.active .step-num { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .step.done   .step-num { background: var(--accent);  border-color: var(--accent);  color: #fff; }
+    .step.active { color: var(--primary); }
+    .step.done   { color: var(--accent); }
+    .step-line { flex: 1; height: 2px; background: var(--border); margin: 0 8px; max-width: 48px; }
+    .step.done + .step-line { background: var(--accent); }
+
+    .id-type-group { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 20px; }
+    .id-type-btn { display: flex; flex-direction: column; align-items: center; gap: 6px;
+      padding: 12px 8px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      cursor: pointer; transition: var(--transition); background: var(--surface);
+      font-family: inherit; font-size: .75rem; font-weight: 600; color: var(--text-secondary); }
+    .id-type-btn i { font-size: 1.25rem; }
+    .id-type-btn.active { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
+    .id-type-btn:hover:not(.active) { border-color: var(--text-muted); background: var(--surface-2); }
+
+    .qr-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 28px; text-align: center; }
+    .qr-card h3 { margin-bottom: 4px; }
+    .qr-card p  { font-size: .875rem; margin-bottom: 24px; }
+
+    #qr-output { display: flex; flex-direction: column; align-items: center; gap: 16px;
+      padding: 24px; background: var(--surface-2); border: 2px dashed var(--border);
+      border-radius: var(--radius-md); min-height: 200px; justify-content: center;
+      margin-bottom: 20px; transition: var(--transition); }
+    #qr-output.has-qr { border-style: solid; border-color: var(--accent); background: #f0fdf4; }
+    #qr-canvas-wrap canvas { border-radius: 8px; }
+    .qr-placeholder-icon { font-size: 3rem; color: var(--text-muted); }
+    .qr-student-name { font-weight: 700; font-size: 1rem; color: var(--text-primary); }
+    .qr-student-id   { font-size: .75rem; color: var(--text-muted); font-family: monospace; }
+    .qr-actions { display: flex; gap: 8px; }
+    .qr-actions .btn { flex: 1; }
+
+    .success-icon { width: 64px; height: 64px; background: #d1fae5; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 16px; font-size: 2rem; color: var(--accent); }
+
+    @media (max-width: 900px) {
+      .reg-body { grid-template-columns: 1fr; }
+      .reg-form-col { padding-right: 0; }
+      .reg-sidebar { position: static; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a href="../index.html" class="navbar-brand">
+    <img src="../logo.png" alt="GCC SmartCheck" onerror="this.style.display='none'" />
+    <span>GCC <strong>SmartCheck</strong></span>
+    <span class="brand-dot"></span>
+  </a>
+  <ul class="navbar-nav">
+    <li><a href="../index.html"><i class="ph ph-sign-in"></i> Sign In</a></li>
+  </ul>
+</nav>
+
+<div class="reg-body fade-in">
+
+  <!-- Form column -->
+  <div class="reg-form-col">
+    <div class="step-indicator">
+      <div class="step active" id="step-1"><div class="step-num">1</div><span>Personal Info</span></div>
+      <div class="step-line"></div>
+      <div class="step" id="step-2"><div class="step-num">2</div><span>Identification</span></div>
+      <div class="step-line"></div>
+      <div class="step" id="step-3"><div class="step-num">3</div><span>Your QR Code</span></div>
+    </div>
+
+    <h2 style="font-size:1.5rem;font-weight:700;margin-bottom:6px">Student Registration</h2>
+    <p style="margin-bottom:32px">Fill in your details to generate your unique attendance QR code.</p>
+
+    <div id="reg-alert" class="hidden"></div>
+
+    <form id="reg-form" onsubmit="handleRegister(event)">
+
+      <!-- Panel 1 -->
+      <div id="panel-1">
+        <div class="card card-sm" style="margin-bottom:24px">
+          <h3 style="margin-bottom:20px;display:flex;align-items:center;gap:8px">
+            <i class="ph ph-user" style="color:var(--primary)"></i> Personal Details
+          </h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">First Name</label>
+              <div class="input-group">
+                <i class="ph ph-user input-icon"></i>
+                <input type="text" id="fname" class="form-control" placeholder="e.g. Owami" required />
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Surname</label>
+              <div class="input-group">
+                <i class="ph ph-user input-icon"></i>
+                <input type="text" id="lname" class="form-control" placeholder="e.g. Mgxekwa" required />
+              </div>
+            </div>
+          </div>
+          <div class="form-group mt-16" style="margin-bottom:0">
+            <label class="form-label">Email Address <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+            <div class="input-group">
+              <i class="ph ph-envelope input-icon"></i>
+              <input type="email" id="email" class="form-control" placeholder="student@gcc.edu" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card card-sm">
+          <h3 style="margin-bottom:16px;display:flex;align-items:center;gap:8px">
+            <i class="ph ph-identification-card" style="color:var(--primary)"></i> Identification
+          </h3>
+          <label class="form-label">ID Type</label>
+          <div class="id-type-group">
+            <button type="button" class="id-type-btn active" id="type-id" onclick="setIdType('id')">
+              <i class="ph ph-identification-card"></i> SA ID Number
+            </button>
+            <button type="button" class="id-type-btn" id="type-passport" onclick="setIdType('passport')">
+              <i class="ph ph-passport"></i> Passport
+            </button>
+            <button type="button" class="id-type-btn" id="type-dob" onclick="setIdType('dob')">
+              <i class="ph ph-calendar"></i> Date of Birth
+            </button>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label" id="id-label">SA ID Number</label>
+            <div class="input-group">
+              <i class="ph ph-hash input-icon" id="id-icon"></i>
+              <input type="text" id="identifier" class="form-control" placeholder="13-digit ID number" required />
+            </div>
+            <p class="form-hint" id="id-hint">Enter your 13-digit South African ID number</p>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg mt-24">
+          <i class="ph ph-qr-code"></i> Generate My QR Code
+        </button>
+        <p class="text-center mt-12" style="font-size:.8125rem;color:var(--text-muted)">
+          Already registered? <a href="../index.html">Sign in here</a>
+        </p>
+      </div>
+
+      <!-- Panel success -->
+      <div id="panel-success" class="hidden">
+        <div class="card card-sm" style="text-align:center;padding:32px">
+          <div class="success-icon"><i class="ph ph-check-bold"></i></div>
+          <h3>Registration Complete</h3>
+          <p style="margin-top:8px">Your QR code has been generated. Download it and keep it safe.</p>
+          <div style="display:flex;gap:12px;margin-top:24px;justify-content:center">
+            <button type="button" class="btn btn-accent" onclick="downloadQR()">
+              <i class="ph ph-download-simple"></i> Download QR
+            </button>
+            <button type="button" class="btn btn-ghost" onclick="printQR()">
+              <i class="ph ph-printer"></i> Print
+            </button>
+          </div>
+          <div class="divider">then</div>
+          <a href="../index.html" class="btn btn-outline btn-block">
+            <i class="ph ph-arrow-left"></i> Back to Home
+          </a>
+        </div>
+      </div>
+
+    </form>
+  </div>
+
+  <!-- QR sidebar -->
+  <div class="reg-sidebar">
+    <div class="qr-card">
+      <h3>Your QR Code</h3>
+      <p>Will appear here after you fill in your details</p>
+      <div id="qr-output">
+        <i class="ph ph-qr-code qr-placeholder-icon"></i>
+        <span style="font-size:.8125rem;color:var(--text-muted)">Complete the form to generate</span>
+      </div>
+      <div id="qr-actions" class="qr-actions hidden">
+        <button class="btn btn-accent btn-sm" onclick="downloadQR()">
+          <i class="ph ph-download-simple"></i> Download
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="printQR()">
+          <i class="ph ph-printer"></i> Print
+        </button>
+      </div>
+    </div>
+
+    <div class="card card-sm mt-16" style="background:var(--primary-light);border-color:#bfdbfe">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <i class="ph ph-info" style="color:var(--primary);font-size:1.25rem;flex-shrink:0;margin-top:2px"></i>
+        <div>
+          <p style="font-size:.8125rem;color:var(--primary-dark);font-weight:600;margin-bottom:4px">How it works</p>
+          <p style="font-size:.8125rem;color:var(--primary-dark)">
+            Your QR code is unique to you. Show it to your lecturer during class and they'll scan it to mark you present.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast-container"></div>
+<script src="../js/app.js"></script>
+</body>
+</html>
