@@ -406,17 +406,28 @@ async function handleRegister(e) {
   // Also save to Parse (best-effort — works offline too)
   try {
     initParse();
-    const Student = Parse.Object.extend('Student');
-    const obj = new Student();
-    obj.set('studentId', student.id);
-    obj.set('fname', fname);
-    obj.set('lname', lname);
-    obj.set('email', email || '');
-    obj.set('identifier', identifier);
-    obj.set('idType', currentIdType);
-    obj.set('course', course);
-    obj.set('modules', modules);
-    await obj.save();
+    const response = await fetch(GCC_CONFIG.parse.serverURL + '/classes/Student', {
+      method: 'POST',
+      headers: {
+        'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
+        'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey,
+        'Content-Type':           'application/json'
+      },
+      body: JSON.stringify({
+        studentId:   student.id,
+        fname:       fname,
+        lname:       lname,
+        email:       email || '',
+        identifier:  identifier,
+        idType:      currentIdType,
+        course:      course,
+        modules:     modules
+      })
+    });
+    if (!response.ok) {
+      const err = await response.json();
+      console.warn('Parse save failed:', err.error || response.status);
+    }
   } catch (err) {
     // Non-fatal: data is already in localStorage
     console.warn('Parse save failed (offline?):', err.message);
@@ -945,9 +956,16 @@ function initScanner() {
     document.getElementById('no-session-alert').classList.remove('hidden');
   }
 
-  // Sync students from Back4App so the lecturer sees everyone
-  // regardless of which device they registered on
-  syncStudentsFromParse().then(() => loadTodayRecords());
+  // Disable Start button and show syncing state until students are loaded
+  const startBtn = document.getElementById('start-btn');
+  startBtn.disabled = true;
+  startBtn.innerHTML = '<i class="ph ph-circle-notch" style="animation:spin .8s linear infinite"></i> Syncing…';
+
+  syncStudentsFromParse().then(() => {
+    startBtn.disabled = false;
+    startBtn.innerHTML = '<i class="ph ph-play"></i> Start Camera';
+    loadTodayRecords();
+  });
 }
 
 async function syncStudentsFromParse() {
@@ -963,15 +981,16 @@ async function syncStudentsFromParse() {
     );
     if (!response.ok) return;
     const data = await response.json();
-    if (!data.results || !data.results.length) return;
 
     // Merge remote students into localStorage — remote wins on conflict
-    const local   = Store.get('gcc_students', []);
+    const local    = Store.get('gcc_students', []);
     const localMap = {};
     local.forEach(s => { localMap[s.id] = s; });
 
-    data.results.forEach(r => {
+    const remoteIds = new Set();
+    (data.results || []).forEach(r => {
       if (!r.studentId) return;
+      remoteIds.add(r.studentId);
       localMap[r.studentId] = {
         id:           r.studentId,
         fname:        r.fname        || '',
@@ -986,6 +1005,33 @@ async function syncStudentsFromParse() {
     });
 
     Store.set('gcc_students', Object.values(localMap));
+
+    // Upload any local students that didn't make it to Parse yet
+    const missing = local.filter(s => !remoteIds.has(s.id));
+    for (const s of missing) {
+      try {
+        await fetch(GCC_CONFIG.parse.serverURL + '/classes/Student', {
+          method: 'POST',
+          headers: {
+            'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
+            'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey,
+            'Content-Type':           'application/json'
+          },
+          body: JSON.stringify({
+            studentId:  s.id,
+            fname:      s.fname,
+            lname:      s.lname,
+            email:      s.email      || '',
+            identifier: s.identifier || '',
+            idType:     s.idType     || 'id',
+            course:     s.course     || '',
+            modules:    s.modules    || []
+          })
+        });
+        console.log('Uploaded missing student to Parse:', s.id);
+      } catch(e) { /* non-fatal */ }
+    }
+
     console.log('Students synced from Back4App:', Object.keys(localMap).length);
   } catch (err) {
     console.warn('Student sync failed (offline?):', err.message);
