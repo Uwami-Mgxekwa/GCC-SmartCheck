@@ -14,6 +14,7 @@ const GCC_CONFIG = Object.freeze({
   parse: {
     appId:     'vZBXXEyIttr1s1FttpgmU1IKya7NIZkkqqn6w80t',
     clientKey: 'NqCURU0dHEJ4hn2yol6Q0r0c8bvlJMRex7MXjrsN',
+    masterKey: 'uARGyRggiR0TzFqpyEGGzUBdvD36sJQ3qV6FLhiV',
     serverURL: 'https://parseapi.back4app.com',
   },
 });

@@ -73,12 +73,13 @@ function formatTime(date = new Date()) {
  * We also cache the role in localStorage so pages can read it synchronously.
  */
 function getCurrentUser() {
-  if (typeof Parse === 'undefined') return null;
-  return Parse.User.current();
+  return Store.get('gcc_session');
 }
 
 function isLoggedIn() {
-  return !!getCurrentUser();
+  const s = Store.get('gcc_session');
+  // Session expires after 8 hours
+  return s && s.role === 'lecturer' && (Date.now() - s.ts) < 8 * 60 * 60 * 1000;
 }
 
 /**
@@ -95,9 +96,7 @@ function requireAuth() {
  * Sign out and go back to the landing page.
  */
 async function logout() {
-  try {
-    if (typeof Parse !== 'undefined') await Parse.User.logOut();
-  } catch (e) { /* ignore */ }
+  Store.remove('gcc_session');
   window.location.href = '../index.html';
 }
 
@@ -117,7 +116,6 @@ function initLogin() {
 
   window.currentRole = 'lecturer';
 }
-
 function switchRole(role) {
   window.currentRole = role;
   document.getElementById('tab-lecturer').classList.toggle('active', role === 'lecturer');
@@ -169,17 +167,42 @@ async function handleLogin(e) {
     const password = document.getElementById('password').value;
 
     try {
-      const user = await Parse.User.logIn(username, password);
+      // Use REST API with master key — Back4App blocks client key on login endpoint
+      const response = await fetch(
+        GCC_CONFIG.parse.serverURL + '/login?username=' +
+          encodeURIComponent(username) + '&password=' + encodeURIComponent(password),
+        {
+          method: 'GET',
+          headers: {
+            'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
+            'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey
+          }
+        }
+      );
 
-      // Only allow users flagged as lecturers
-      if (user.get('role') !== 'lecturer') {
-        await Parse.User.logOut();
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
+
+      // Only allow lecturers
+      if (data.role !== 'lecturer') {
         showLoginAlert('Access denied. This login is for lecturers only.', 'danger');
         resetLoginBtn(btn);
         return;
       }
 
-      showToast('Welcome back, ' + (user.get('displayName') || username) + '!', 'success');
+      // Store session info locally
+      Store.set('gcc_session', {
+        role:        data.role,
+        username:    data.username,
+        name:        data.displayName || data.username,
+        sessionToken: data.sessionToken,
+        ts:          Date.now()
+      });
+
+      showToast('Welcome back, ' + (data.displayName || username) + '!', 'success');
       setTimeout(() => { window.location.href = 'pages/dashboard.html'; }, 800);
 
     } catch (err) {
@@ -389,7 +412,7 @@ function initDashboard() {
   requireAuth();
 
   const user = getCurrentUser();
-  const displayName = user ? (user.get('displayName') || user.getUsername()) : 'Lecturer';
+  const displayName = user ? (user.name || user.username) : 'Lecturer';
   document.getElementById('welcome-msg').textContent =
     'Welcome back, ' + displayName + ' — manage sessions and view attendance.';
 
