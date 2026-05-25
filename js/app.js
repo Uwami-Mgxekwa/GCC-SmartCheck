@@ -1,13 +1,27 @@
 /**
  * GCC SmartCheck — app.js
- * All shared utilities and page logic in one file.
+ * Authentication via Back4App (Parse Platform).
+ * Config is loaded from js/config.js (sourced from .env).
  */
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PARSE INIT
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Parse SDK is loaded via CDN in each HTML page before this script.
+function initParse() {
+  if (typeof Parse === 'undefined') {
+    console.error('Parse SDK not loaded.');
+    return;
+  }
+  Parse.initialize(GCC_CONFIG.parse.appId, GCC_CONFIG.parse.clientKey);
+  Parse.serverURL = GCC_CONFIG.parse.serverURL;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UTILITIES
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Show a toast notification */
 function showToast(message, type = 'info', duration = 3000) {
   const container = document.getElementById('toast-container');
   if (!container) return;
@@ -22,7 +36,6 @@ function showToast(message, type = 'info', duration = 3000) {
   }, duration);
 }
 
-/** Deterministic hash for student ID generation */
 function simpleHash(str) {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -33,7 +46,6 @@ function simpleHash(str) {
   return Math.abs(hash).toString(36).padStart(8, '0');
 }
 
-/** localStorage helpers */
 const Store = {
   get(key, fallback = null) {
     try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
@@ -46,25 +58,46 @@ const Store = {
   remove(key) { localStorage.removeItem(key); }
 };
 
-/** Today as YYYY-MM-DD */
 function todayISO() { return new Date().toISOString().split('T')[0]; }
 
-/** Format time HH:MM */
 function formatTime(date = new Date()) {
   return date.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
 }
 
-/** Auth helpers */
-function getSession() { return Store.get('gcc_session'); }
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTH HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns the current Parse session user, or null.
+ * We also cache the role in localStorage so pages can read it synchronously.
+ */
+function getCurrentUser() {
+  if (typeof Parse === 'undefined') return null;
+  return Parse.User.current();
+}
+
 function isLoggedIn() {
-  const s = getSession();
-  return s && (Date.now() - s.ts) < 8 * 60 * 60 * 1000;
+  return !!getCurrentUser();
 }
+
+/**
+ * Redirect to login if not authenticated.
+ * Called at the top of protected pages (dashboard, scan).
+ */
 function requireAuth() {
-  if (!isLoggedIn()) window.location.href = '../index.html';
+  if (!isLoggedIn()) {
+    window.location.href = '../index.html';
+  }
 }
-function logout() {
-  Store.remove('gcc_session');
+
+/**
+ * Sign out and go back to the landing page.
+ */
+async function logout() {
+  try {
+    if (typeof Parse !== 'undefined') await Parse.User.logOut();
+  } catch (e) { /* ignore */ }
   window.location.href = '../index.html';
 }
 
@@ -73,11 +106,14 @@ function logout() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function initLogin() {
-  if (typeof window === 'undefined') return;
+  initParse();
   if (!document.getElementById('login-form')) return;
 
-  // Redirect if already logged in
-  if (isLoggedIn()) { window.location.href = 'pages/dashboard.html'; return; }
+  // Already logged in → go straight to dashboard
+  if (isLoggedIn()) {
+    window.location.href = 'pages/dashboard.html';
+    return;
+  }
 
   window.currentRole = 'lecturer';
 }
@@ -86,12 +122,15 @@ function switchRole(role) {
   window.currentRole = role;
   document.getElementById('tab-lecturer').classList.toggle('active', role === 'lecturer');
   document.getElementById('tab-student').classList.toggle('active', role === 'student');
+
+  // Username field only shown for lecturer
   const usernameGroup = document.getElementById('username-group');
-  if (role === 'student') {
-    usernameGroup.style.display = 'none';
-  } else {
-    usernameGroup.style.display = 'block';
-  }
+  usernameGroup.style.display = role === 'student' ? 'none' : 'block';
+
+  // Hide the "Register as a Student" shortcut when on lecturer tab
+  const registerBtn = document.getElementById('register-shortcut');
+  if (registerBtn) registerBtn.style.display = role === 'lecturer' ? 'none' : 'flex';
+
   clearLoginAlert();
 }
 
@@ -107,42 +146,48 @@ function togglePassword() {
   }
 }
 
-function handleLogin(e) {
+async function handleLogin(e) {
   e.preventDefault();
   const btn = document.getElementById('login-btn');
   btn.disabled = true;
   btn.innerHTML = '<i class="ph ph-circle-notch" style="animation:spin .8s linear infinite"></i> Signing in…';
 
-  setTimeout(() => {
-    if (window.currentRole === 'lecturer') {
-      const username = document.getElementById('username').value.trim();
-      const password = document.getElementById('password').value;
-      const lecturers = Store.get('gcc_lecturers', []);
-      const defaultMatch = username === 'admin' && password === 'admin123';
-      const storedMatch  = lecturers.find(l => l.username === username && l.password === password);
+  if (window.currentRole === 'lecturer') {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
 
-      if (defaultMatch || storedMatch) {
-        Store.set('gcc_session', {
-          role: 'lecturer',
-          username,
-          name: storedMatch ? storedMatch.name : 'Administrator',
-          ts: Date.now()
-        });
-        showToast('Welcome back, ' + (storedMatch ? storedMatch.name : 'Admin') + '!', 'success');
-        setTimeout(() => window.location.href = 'pages/dashboard.html', 800);
-      } else {
-        showLoginAlert('Invalid username or password. Try <strong>admin / admin123</strong>.', 'danger');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="ph ph-sign-in"></i> Sign In';
+    try {
+      const user = await Parse.User.logIn(username, password);
+
+      // Only allow users flagged as lecturers
+      if (user.get('role') !== 'lecturer') {
+        await Parse.User.logOut();
+        showLoginAlert('Access denied. This login is for lecturers only.', 'danger');
+        resetLoginBtn(btn);
+        return;
       }
-    } else {
-      window.location.href = 'pages/register.html';
+
+      showToast('Welcome back, ' + (user.get('displayName') || username) + '!', 'success');
+      setTimeout(() => { window.location.href = 'pages/dashboard.html'; }, 800);
+
+    } catch (err) {
+      showLoginAlert('Invalid username or password.', 'danger');
+      resetLoginBtn(btn);
     }
-  }, 600);
+
+  } else {
+    // Student tab → redirect to registration (no student login)
+    window.location.href = 'pages/register.html';
+  }
+}
+
+function resetLoginBtn(btn) {
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ph ph-sign-in"></i> Sign In';
 }
 
 function showLoginAlert(msg, type) {
-  const el = document.getElementById('login-alert');
+  const el   = document.getElementById('login-alert');
   const icon = type === 'danger' ? 'warning-circle' : 'check-circle';
   el.className = `alert alert-${type}`;
   el.innerHTML = `<i class="ph ph-${icon}"></i><span>${msg}</span>`;
@@ -191,7 +236,7 @@ function setIdType(type) {
   document.getElementById('id-icon').className = `ph ${cfg.icon} input-icon`;
 }
 
-function handleRegister(e) {
+async function handleRegister(e) {
   e.preventDefault();
   const fname      = document.getElementById('fname').value.trim();
   const lname      = document.getElementById('lname').value.trim();
@@ -199,9 +244,11 @@ function handleRegister(e) {
   const identifier = document.getElementById('identifier').value.trim();
 
   if (!fname || !lname || !identifier) {
-    showRegAlert('Please fill in all required fields.', 'danger'); return;
+    showRegAlert('Please fill in all required fields.', 'danger');
+    return;
   }
 
+  // Check for duplicate in localStorage (offline-first)
   const students  = Store.get('gcc_students', []);
   const duplicate = students.find(s =>
     s.fname.toLowerCase() === fname.toLowerCase() &&
@@ -212,7 +259,8 @@ function handleRegister(e) {
   if (duplicate) {
     showRegAlert('A student with these details is already registered.', 'warning');
     generatedStudentId = duplicate.id;
-    renderQR(duplicate); return;
+    renderQR(duplicate);
+    return;
   }
 
   const raw  = fname.toLowerCase() + lname.toLowerCase() + identifier + Date.now();
@@ -223,8 +271,27 @@ function handleRegister(e) {
     idType: currentIdType, registeredAt: new Date().toISOString()
   };
 
+  // Save locally
   students.push(student);
   Store.set('gcc_students', students);
+
+  // Also save to Parse (best-effort — works offline too)
+  try {
+    initParse();
+    const Student = Parse.Object.extend('Student');
+    const obj = new Student();
+    obj.set('studentId', student.id);
+    obj.set('fname', fname);
+    obj.set('lname', lname);
+    obj.set('email', email || '');
+    obj.set('identifier', identifier);
+    obj.set('idType', currentIdType);
+    await obj.save();
+  } catch (err) {
+    // Non-fatal: data is already in localStorage
+    console.warn('Parse save failed (offline?):', err.message);
+  }
+
   renderQR(student);
   showRegSuccess();
   showToast('Registration successful! QR code generated.', 'success');
@@ -281,7 +348,8 @@ function printQR() {
     <img src="${canvas.toDataURL()}" style="width:220px;height:220px;border-radius:8px"/>
     <div class="id">${generatedStudentId}</div>
     </body></html>`);
-  win.document.close(); win.print();
+  win.document.close();
+  win.print();
 }
 
 function showRegAlert(msg, type) {
@@ -305,10 +373,14 @@ const moduleMap = {
 };
 
 function initDashboard() {
+  initParse();
   requireAuth();
-  const s = getSession();
+
+  const user = getCurrentUser();
+  const displayName = user ? (user.get('displayName') || user.getUsername()) : 'Lecturer';
   document.getElementById('welcome-msg').textContent =
-    'Welcome back, ' + (s.name || s.username) + ' — manage sessions and view attendance.';
+    'Welcome back, ' + displayName + ' — manage sessions and view attendance.';
+
   document.getElementById('sel-date').value = todayISO();
   loadStats();
   loadAttendance();
@@ -526,14 +598,15 @@ function switchTab(name) {
 // SCAN PAGE  (pages/scan.html)
 // ─────────────────────────────────────────────────────────────────────────────
 
-let html5QrCode  = null;
+let html5QrCode   = null;
 let scannerActive = false;
 const scannedToday = new Set();
 
 function initScanner() {
+  initParse();
   requireAuth();
-  const activeSession = Store.get('gcc_active_session');
 
+  const activeSession = Store.get('gcc_active_session');
   if (activeSession) {
     document.getElementById('bar-course').textContent = activeSession.course;
     document.getElementById('bar-module').textContent = activeSession.module;

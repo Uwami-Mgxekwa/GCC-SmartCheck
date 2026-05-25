@@ -1,0 +1,7 @@
+# Environment variables — never commit secrets
+.env
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/settings.json
