@@ -1129,6 +1129,17 @@ function processStudentId(id) {
   attendance.push(record);
   Store.set('gcc_attendance', attendance);
 
+  // Save to Back4App so the student can see it on their dashboard
+  fetch(GCC_CONFIG.parse.serverURL + '/classes/Attendance', {
+    method: 'POST',
+    headers: {
+      'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
+      'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey,
+      'Content-Type':           'application/json'
+    },
+    body: JSON.stringify(record)
+  }).catch(err => console.warn('Attendance sync failed:', err.message));
+
   scannedToday.add(id);
   addToScanList(record);
   updateScanSummary();
@@ -1232,16 +1243,61 @@ function initStudentDashboard() {
   document.getElementById('s-course-badge').textContent = student.course || 'No course';
   document.getElementById('s-id-badge').textContent  = student.id;
 
-  // Get all attendance records for this student
+  // Render QR immediately — doesn't need network
+  renderStudentQR(student);
+
+  // Sync attendance from Back4App then render stats
+  syncAttendanceFromParse(student.id).then(() => {
+    renderStudentDashboard(student);
+  });
+}
+
+async function syncAttendanceFromParse(studentId) {
+  try {
+    const where    = encodeURIComponent(JSON.stringify({ studentId }));
+    const response = await fetch(
+      GCC_CONFIG.parse.serverURL + '/classes/Attendance?where=' + where + '&limit=1000',
+      {
+        headers: {
+          'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
+          'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey
+        }
+      }
+    );
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data.results || !data.results.length) return;
+
+    // Merge into localStorage — use ts as unique key to avoid duplicates
+    const local   = Store.get('gcc_attendance', []);
+    const tsSet   = new Set(local.map(r => r.ts));
+    let added = 0;
+    data.results.forEach(r => {
+      if (!r.studentId || tsSet.has(r.ts)) return;
+      local.push({
+        studentId: r.studentId,
+        name:      r.name      || '',
+        module:    r.module    || '',
+        course:    r.course    || '',
+        date:      r.date      || '',
+        time:      r.time      || '',
+        ts:        r.ts        || r.createdAt
+      });
+      added++;
+    });
+    if (added) Store.set('gcc_attendance', local);
+  } catch (err) {
+    console.warn('Attendance sync failed:', err.message);
+  }
+}
+
+function renderStudentDashboard(student) {
   const allAtt = Store.get('gcc_attendance', []);
   const myAtt  = allAtt.filter(r => r.studentId === student.id);
 
-  // Overall stats — count unique sessions (date+module) as total possible
-  // We use total sessions recorded for the student's module as denominator
-  const myModules = [...new Set(myAtt.map(r => r.module))];
-  const allSessions = allAtt.filter(r =>
-    myModules.includes(r.module)
-  );
+  // Overall stats
+  const myModules       = [...new Set(myAtt.map(r => r.module))];
+  const allSessions     = allAtt.filter(r => myModules.includes(r.module));
   const totalUniqueSessions = [...new Set(allSessions.map(r => r.date + '|' + r.module))].length;
   const attended = myAtt.length;
   const missed   = Math.max(0, totalUniqueSessions - attended);
@@ -1252,14 +1308,8 @@ function initStudentDashboard() {
   document.getElementById('s-stat-absent').textContent  = missed;
   document.getElementById('s-stat-rate').textContent    = rate !== null ? rate + '%' : '—';
 
-  // Module breakdown cards
   renderStudentModuleCards(student, myAtt, allAtt);
-
-  // History table
   renderStudentHistory(myAtt);
-
-  // QR code
-  renderStudentQR(student);
 }
 
 function renderStudentModuleCards(student, myAtt, allAtt) {
