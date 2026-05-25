@@ -399,13 +399,31 @@ function showRegAlert(msg, type) {
 // DASHBOARD PAGE  (pages/dashboard.html)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const moduleMap = {
-  ICT:         ['Cybersecurity', 'Networking', 'Programming', 'Database Management', 'Web Development', 'Cloud Computing'],
-  Engineering: ['Mathematics', 'Physics', 'Mechanics', 'Electrical Engineering', 'Civil Engineering'],
-  Business:    ['Accounting', 'Economics', 'Marketing', 'Management', 'Business Law'],
-  Science:     ['Biology', 'Chemistry', 'Physics', 'Statistics', 'Research Methods'],
-  Humanities:  ['English', 'History', 'Philosophy', 'Sociology', 'Psychology']
+// Default courses seeded on first load — user can edit freely in the Courses tab
+const DEFAULT_COURSES = {
+  'System Development': ['Advanced Database Management Systems', 'Advanced Programming I'],
+  'Office Administration': ['Digital Literacy']
 };
+
+/** Get courses map from localStorage, seeding defaults on first run */
+function getCourses() {
+  const stored = Store.get('gcc_courses');
+  if (stored) return stored;
+  Store.set('gcc_courses', DEFAULT_COURSES);
+  return DEFAULT_COURSES;
+}
+
+/** Populate the course dropdown in Session Setup from stored courses */
+function populateCourseDropdown() {
+  const sel  = document.getElementById('sel-course');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">Select course…</option>';
+  Object.keys(getCourses()).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c; sel.appendChild(opt);
+  });
+  if (prev) { sel.value = prev; updateModules(); }
+}
 
 function initDashboard() {
   initParse();
@@ -417,6 +435,7 @@ function initDashboard() {
     'Welcome back, ' + displayName + ' — manage sessions and view attendance.';
 
   document.getElementById('sel-date').value = todayISO();
+  populateCourseDropdown();
   loadStats();
   loadAttendance();
   loadStudents();
@@ -424,10 +443,10 @@ function initDashboard() {
 }
 
 function updateModules() {
-  const course = document.getElementById('sel-course').value;
-  const sel    = document.getElementById('sel-module');
+  const course  = document.getElementById('sel-course').value;
+  const sel     = document.getElementById('sel-module');
   sel.innerHTML = '<option value="">Select module…</option>';
-  (moduleMap[course] || []).forEach(m => {
+  (getCourses()[course] || []).forEach(m => {
     const opt = document.createElement('option');
     opt.value = m; opt.textContent = m; sel.appendChild(opt);
   });
@@ -436,6 +455,7 @@ function updateModules() {
 function loadSessionConfig() {
   const s = Store.get('gcc_active_session');
   if (!s) return;
+  populateCourseDropdown();
   document.getElementById('sel-course').value = s.course;
   updateModules();
   document.getElementById('sel-module').value = s.module;
@@ -623,10 +643,142 @@ function clearStudents() {
 }
 
 function switchTab(name) {
-  const names = ['attendance', 'session', 'students'];
+  const names = ['attendance', 'session', 'courses', 'students'];
   document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', names[i] === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'courses') renderCourseList();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COURSE MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+let selectedCourse = null;
+
+function renderCourseList() {
+  const courses = getCourses();
+  const keys    = Object.keys(courses);
+  const el      = document.getElementById('course-list');
+  document.getElementById('course-count').textContent = keys.length;
+
+  if (!keys.length) {
+    el.innerHTML = `<div class="empty-state" style="padding:32px 16px">
+      <i class="ph ph-books"></i><p>No courses yet. Add one below.</p></div>`;
+    return;
+  }
+
+  el.innerHTML = keys.map(name => `
+    <div class="course-item ${name === selectedCourse ? 'active' : ''}"
+         onclick="selectCourse('${name.replace(/'/g,"\\'")}')">
+      <div class="course-item-icon"><i class="ph ph-chalkboard"></i></div>
+      <div class="course-item-info">
+        <div class="course-item-name">${name}</div>
+        <div class="course-item-count">${courses[name].length} module${courses[name].length !== 1 ? 's' : ''}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="padding:4px 8px"
+        onclick="event.stopPropagation();deleteCourse('${name.replace(/'/g,"\\'")}')">
+        <i class="ph ph-trash" style="color:var(--danger)"></i>
+      </button>
+    </div>`).join('');
+
+  if (selectedCourse) renderModuleList(selectedCourse);
+}
+
+function selectCourse(name) {
+  selectedCourse = name;
+  renderCourseList();
+  renderModuleList(name);
+}
+
+function renderModuleList(courseName) {
+  const courses = getCourses();
+  const modules = courses[courseName] || [];
+  document.getElementById('module-panel-title').textContent = courseName;
+  document.getElementById('module-count').textContent = modules.length + ' module' + (modules.length !== 1 ? 's' : '');
+  document.getElementById('module-add-form').style.display = 'flex';
+
+  const el = document.getElementById('module-list');
+  if (!modules.length) {
+    el.innerHTML = `<div class="empty-state" style="padding:24px 16px">
+      <i class="ph ph-chalkboard"></i><p>No modules yet. Add one below.</p></div>`;
+    return;
+  }
+
+  el.innerHTML = modules.map((m, i) => `
+    <div class="module-item">
+      <i class="ph ph-dot-outline" style="color:var(--primary);flex-shrink:0"></i>
+      <span class="module-item-name">${m}</span>
+      <button class="btn btn-ghost btn-sm" style="padding:4px 8px"
+        onclick="deleteModule('${courseName.replace(/'/g,"\\'")}', ${i})">
+        <i class="ph ph-x" style="color:var(--danger)"></i>
+      </button>
+    </div>`).join('');
+}
+
+function addCourse() {
+  const input = document.getElementById('new-course-name');
+  const name  = input.value.trim();
+  if (!name) { showToast('Enter a course name.', 'danger'); return; }
+
+  const courses = getCourses();
+  if (courses[name]) { showToast('That course already exists.', 'warning'); return; }
+
+  courses[name] = [];
+  Store.set('gcc_courses', courses);
+  input.value = '';
+  selectedCourse = name;
+  renderCourseList();
+  renderModuleList(name);
+  populateCourseDropdown();
+  showToast('Course "' + name + '" added.', 'success');
+}
+
+function deleteCourse(name) {
+  if (!confirm('Delete "' + name + '" and all its modules?')) return;
+  const courses = getCourses();
+  delete courses[name];
+  Store.set('gcc_courses', courses);
+  if (selectedCourse === name) {
+    selectedCourse = null;
+    document.getElementById('module-panel-title').textContent = 'Select a course';
+    document.getElementById('module-count').textContent = '0 modules';
+    document.getElementById('module-add-form').style.display = 'none';
+    document.getElementById('module-list').innerHTML = `<div class="empty-state" style="padding:32px 16px">
+      <i class="ph ph-chalkboard"></i><p>Select a course on the left to manage its modules.</p></div>`;
+  }
+  renderCourseList();
+  populateCourseDropdown();
+  showToast('Course deleted.', 'info');
+}
+
+function addModule() {
+  if (!selectedCourse) { showToast('Select a course first.', 'danger'); return; }
+  const input = document.getElementById('new-module-name');
+  const name  = input.value.trim();
+  if (!name) { showToast('Enter a module name.', 'danger'); return; }
+
+  const courses = getCourses();
+  if (!courses[selectedCourse]) courses[selectedCourse] = [];
+  if (courses[selectedCourse].includes(name)) { showToast('Module already exists.', 'warning'); return; }
+
+  courses[selectedCourse].push(name);
+  Store.set('gcc_courses', courses);
+  input.value = '';
+  renderCourseList();
+  renderModuleList(selectedCourse);
+  populateCourseDropdown();
+  showToast('Module "' + name + '" added.', 'success');
+}
+
+function deleteModule(courseName, index) {
+  const courses = getCourses();
+  courses[courseName].splice(index, 1);
+  Store.set('gcc_courses', courses);
+  renderCourseList();
+  renderModuleList(courseName);
+  populateCourseDropdown();
+  showToast('Module removed.', 'info');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -205,8 +205,6 @@
           <label class="form-label">Course</label>
           <select class="form-control" id="sel-course" onchange="updateModules()">
             <option value="">Select course…</option>
-            <option>ICT</option><option>Engineering</option><option>Business</option>
-            <option>Science</option><option>Humanities</option>
           </select>
         </div>
         <div class="form-group" style="margin-bottom:0">
@@ -232,6 +230,64 @@
         <i class="ph ph-info"></i>
         <span id="active-session-text"></span>
       </div>
+    </div>
+  </div>
+
+  <!-- Courses tab -->
+  <div class="tab-panel" id="tab-courses">
+    <div class="courses-layout">
+
+      <!-- Left: course list + add form -->
+      <div>
+        <div class="course-card">
+          <div class="course-card-header">
+            <h3><i class="ph ph-books"></i> Your Courses</h3>
+            <span class="badge badge-primary" id="course-count">0</span>
+          </div>
+          <div class="course-list" id="course-list">
+            <div class="empty-state" style="padding:32px 16px">
+              <i class="ph ph-books"></i>
+              <p>No courses yet. Add one below.</p>
+            </div>
+          </div>
+          <div class="add-course-form">
+            <p style="font-size:.8125rem;font-weight:600;margin-bottom:10px;color:var(--text-primary)">
+              <i class="ph ph-plus-circle" style="color:var(--primary)"></i> Add New Course
+            </p>
+            <input type="text" id="new-course-name" class="form-control"
+              placeholder="e.g. System Development" maxlength="80"
+              onkeydown="if(event.key==='Enter')addCourse()" />
+            <button class="btn btn-primary btn-block btn-sm" onclick="addCourse()">
+              <i class="ph ph-plus"></i> Add Course
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: modules for selected course -->
+      <div>
+        <div class="module-panel">
+          <div class="module-panel-header">
+            <h3><i class="ph ph-chalkboard"></i> <span id="module-panel-title">Select a course</span></h3>
+            <span class="badge badge-neutral" id="module-count">0 modules</span>
+          </div>
+          <div class="module-list" id="module-list">
+            <div class="empty-state" style="padding:32px 16px">
+              <i class="ph ph-chalkboard"></i>
+              <p>Select a course on the left to manage its modules.</p>
+            </div>
+          </div>
+          <div class="module-add-form" id="module-add-form" style="display:none">
+            <input type="text" id="new-module-name" class="form-control"
+              placeholder="e.g. Advanced Programming I" maxlength="80"
+              onkeydown="if(event.key==='Enter')addModule()" />
+            <button class="btn btn-primary btn-sm" onclick="addModule()">
+              <i class="ph ph-plus"></i> Add
+            </button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
