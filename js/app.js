@@ -575,8 +575,10 @@ function initDashboard() {
   populateCourseDropdown();
   loadStats();
   loadAttendance();
-  loadStudents();
   loadSessionConfig();
+
+  // Sync students from Back4App then render the list
+  syncStudentsFromParse().then(() => loadStudents());
 }
 
 function updateModules() {
@@ -943,7 +945,51 @@ function initScanner() {
     document.getElementById('no-session-alert').classList.remove('hidden');
   }
 
-  loadTodayRecords();
+  // Sync students from Back4App so the lecturer sees everyone
+  // regardless of which device they registered on
+  syncStudentsFromParse().then(() => loadTodayRecords());
+}
+
+async function syncStudentsFromParse() {
+  try {
+    const response = await fetch(
+      GCC_CONFIG.parse.serverURL + '/classes/Student?limit=1000',
+      {
+        headers: {
+          'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
+          'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey
+        }
+      }
+    );
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data.results || !data.results.length) return;
+
+    // Merge remote students into localStorage — remote wins on conflict
+    const local   = Store.get('gcc_students', []);
+    const localMap = {};
+    local.forEach(s => { localMap[s.id] = s; });
+
+    data.results.forEach(r => {
+      if (!r.studentId) return;
+      localMap[r.studentId] = {
+        id:           r.studentId,
+        fname:        r.fname        || '',
+        lname:        r.lname        || '',
+        email:        r.email        || '',
+        identifier:   r.identifier   || '',
+        idType:       r.idType       || 'id',
+        course:       r.course       || '',
+        modules:      r.modules      || [],
+        registeredAt: r.createdAt    || new Date().toISOString()
+      };
+    });
+
+    Store.set('gcc_students', Object.values(localMap));
+    console.log('Students synced from Back4App:', Object.keys(localMap).length);
+  } catch (err) {
+    console.warn('Student sync failed (offline?):', err.message);
+  }
 }
 
 function startScanner() {
