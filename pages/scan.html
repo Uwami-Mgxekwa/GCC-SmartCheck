@@ -93,8 +93,30 @@
     .attendance-panel-footer .btn { flex: 1; }
 
     @media (max-width: 900px) {
-      .scan-body { grid-template-columns: 1fr; }
+      .scan-body { grid-template-columns: 1fr; padding: 16px 12px; gap: 16px; }
       .attendance-col { position: static; }
+
+      /* Session bar wraps nicely */
+      .session-bar { padding: 12px 14px; gap: 8px; }
+      .session-bar-divider { display: none; }
+      .session-bar-item { font-size: .75rem; }
+
+      /* Scanner card full width */
+      .scanner-card { border-radius: var(--radius-md); }
+      #reader { min-height: 260px; }
+      .scanner-idle { min-height: 260px; }
+      .scan-frame-box { width: 180px; height: 180px; }
+
+      /* Attendance panel — compact on mobile */
+      .attendance-scroll { max-height: 280px; }
+
+      /* Manual entry */
+      .card.card-sm { padding: 16px; }
+    }
+    @media (max-width: 480px) {
+      .scanner-header h2 { font-size: 1.125rem; }
+      .session-bar { flex-direction: column; align-items: flex-start; gap: 6px; }
+      .session-bar > div[style*="flex:1"] { display: none; }
     }
   </style>
 </head>
@@ -226,6 +248,20 @@
 </div>
 
 <div id="toast-container"></div>
+
+<!-- Mobile bottom nav -->
+<nav class="mobile-nav">
+  <a href="dashboard.html" class="mobile-nav-item">
+    <i class="ph ph-squares-four"></i><span>Dashboard</span>
+  </a>
+  <a href="scan.html" class="mobile-nav-item active">
+    <i class="ph ph-scan"></i><span>Scan</span>
+  </a>
+  <a href="#" onclick="logout()" class="mobile-nav-item" style="color:var(--danger)">
+    <i class="ph ph-sign-out"></i><span>Sign Out</span>
+  </a>
+</nav>
+
 <!-- Parse SDK (Back4App authentication) -->
 <script src="https://unpkg.com/parse/dist/parse.min.js"></script>
 <script src="../js/config.js"></script>

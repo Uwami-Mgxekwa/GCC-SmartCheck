@@ -54,11 +54,34 @@
     .two-col { display: grid; grid-template-columns: 1fr 280px; gap: 24px; align-items: start; }
 
     @media (max-width: 800px) {
-      .stat-grid { grid-template-columns: 1fr 1fr; }
+      .sdash-body { padding: 16px 12px; }
+      .stat-grid { grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
       .two-col   { grid-template-columns: 1fr; }
+
+      /* Move QR section above history on mobile */
+      .two-col > div:last-child { order: -1; }
+
+      .page-header { flex-direction: column; gap: 10px; margin-bottom: 20px; }
+      .page-header > div:last-child { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+
+      .module-grid { grid-template-columns: 1fr; gap: 12px; }
+      .module-att-card { padding: 16px; }
+
+      /* QR centered and full-width feel */
+      .qr-section { padding: 20px 16px; }
+      #student-qr-wrap canvas { width: 160px !important; height: 160px !important; }
+
+      .history-section { border-radius: var(--radius-md); }
+      table { font-size: .8125rem; }
+      thead th { padding: 10px 10px; }
+      tbody td { padding: 10px 10px; }
     }
     @media (max-width: 480px) {
-      .stat-grid { grid-template-columns: 1fr; }
+      .stat-grid { grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+      .stat-card { padding: 12px 10px; gap: 8px; flex-direction: column; text-align: center; }
+      .stat-icon { width: 36px; height: 36px; font-size: 1rem; }
+      .stat-value { font-size: 1.25rem; }
+      .stat-label { font-size: .7rem; }
     }
   </style>
 </head>
