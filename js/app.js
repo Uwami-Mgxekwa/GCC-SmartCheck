@@ -123,13 +123,25 @@ function switchRole(role) {
   document.getElementById('tab-lecturer').classList.toggle('active', role === 'lecturer');
   document.getElementById('tab-student').classList.toggle('active', role === 'student');
 
-  // Username field only shown for lecturer
+  // Username field and login form only shown for lecturer
   const usernameGroup = document.getElementById('username-group');
-  usernameGroup.style.display = role === 'student' ? 'none' : 'block';
+  const loginForm     = document.getElementById('login-form');
+  const lecturerNote  = document.getElementById('lecturer-note');
 
-  // Hide the "Register as a Student" shortcut when on lecturer tab
+  if (role === 'student') {
+    // Students don't log in — they register
+    usernameGroup.style.display = 'none';
+    if (loginForm)    loginForm.style.display    = 'none';
+    if (lecturerNote) lecturerNote.style.display = 'none';
+  } else {
+    usernameGroup.style.display = 'block';
+    if (loginForm)    loginForm.style.display    = 'block';
+    if (lecturerNote) lecturerNote.style.display = 'block';
+  }
+
+  // Show/hide the register shortcut
   const registerBtn = document.getElementById('register-shortcut');
-  if (registerBtn) registerBtn.style.display = role === 'lecturer' ? 'none' : 'flex';
+  if (registerBtn) registerBtn.style.display = role === 'lecturer' ? 'none' : 'block';
 
   clearLoginAlert();
 }
