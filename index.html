@@ -164,23 +164,14 @@
       <!-- Student login form -->
       <form id="student-login-form" onsubmit="handleStudentLogin(event)" style="display:none">
         <div class="form-group">
-          <label class="form-label">Student ID</label>
+          <label class="form-label">Your ID Number <span style="color:var(--text-muted);font-weight:400">or Student ID</span></label>
           <div class="input-group">
-            <i class="ph ph-identification-badge input-icon"></i>
-            <input type="text" id="student-id-input" class="form-control"
-              placeholder="Your gcc-… ID from your QR code" autocomplete="off" />
-          </div>
-          <p class="form-hint">Find this on your QR code card (starts with gcc-)</p>
-        </div>
-        <div class="form-group">
-          <label class="form-label">ID Number / Passport / Date of Birth</label>
-          <div class="input-group">
-            <i class="ph ph-lock-simple input-icon"></i>
+            <i class="ph ph-identification-card input-icon"></i>
             <input type="text" id="student-identifier" class="form-control"
-              placeholder="The identifier you registered with" autocomplete="off" />
-            <i class="ph ph-eye input-icon-right" id="toggle-sid" onclick="toggleStudentIdentifier()"></i>
+              placeholder="SA ID / Passport / DOB  or  gcc-…"
+              autocomplete="off" autocapitalize="none" />
           </div>
-          <p class="form-hint">Same value you entered when you registered</p>
+          <p class="form-hint">Enter your SA ID number, passport, date of birth, <em>or</em> your gcc-… Student ID</p>
         </div>
         <button type="submit" class="btn btn-primary btn-block btn-lg" id="student-login-btn">
           <i class="ph ph-sign-in"></i> Sign In

@@ -255,43 +255,46 @@ function toggleStudentIdentifier() {
 
 function handleStudentLogin(e) {
   e.preventDefault();
-  const btn        = document.getElementById('student-login-btn');
-  const studentId  = document.getElementById('student-id-input').value.trim();
-  const identifier = document.getElementById('student-identifier').value.trim();
+  const btn   = document.getElementById('student-login-btn');
+  const input = document.getElementById('student-identifier').value.trim();
 
-  if (!studentId || !identifier) {
-    showLoginAlert('Please fill in both fields.', 'danger');
+  if (!input) {
+    showLoginAlert('Please enter your ID number or Student ID.', 'danger');
     return;
   }
 
   btn.disabled = true;
   btn.innerHTML = '<i class="ph ph-circle-notch" style="animation:spin .8s linear infinite"></i> Signing in…';
 
-  // Look up student in localStorage
   const students = Store.get('gcc_students', []);
-  const student  = students.find(s =>
-    s.id === studentId && s.identifier === identifier
-  );
+  let student = null;
+
+  if (input.startsWith('gcc-')) {
+    // Logging in with Student ID directly
+    student = students.find(s => s.id === input);
+  } else {
+    // Logging in with SA ID / passport / DOB
+    student = students.find(s => s.identifier === input);
+  }
 
   if (!student) {
-    showLoginAlert('Student ID or identifier not found. Check your details and try again.', 'danger');
+    showLoginAlert('No account found. Check your details or register first.', 'danger');
     btn.disabled = false;
     btn.innerHTML = '<i class="ph ph-sign-in"></i> Sign In';
     return;
   }
 
-  // Save student session
   Store.set('gcc_student_session', {
     role:      'student',
     studentId: student.id,
     name:      student.fname + ' ' + student.lname,
-    course:    student.course || '',
-    module:    student.module || '',
+    course:    student.course  || '',
+    modules:   student.modules || [],
     ts:        Date.now()
   });
 
   showToast('Welcome, ' + student.fname + '!', 'success');
-  setTimeout(() => { window.location.href = 'pages/student-dashboard.html'; }, 800);
+  setTimeout(() => { window.location.href = 'pages/student-dashboard.html'; }, 600);
 }
 
 function getStudentSession() {
@@ -316,22 +319,15 @@ function initRegister() {
   const courses = getCourses();
   const sel = document.getElementById('reg-course');
   if (!sel) return;
-  sel.innerHTML = '<option value="">Select course…</option>';
+  sel.innerHTML = '<option value="">Select your course…</option>';
   Object.keys(courses).forEach(c => {
     const opt = document.createElement('option');
     opt.value = c; opt.textContent = c; sel.appendChild(opt);
   });
 }
 
-function updateRegModules() {
-  const course  = document.getElementById('reg-course').value;
-  const sel     = document.getElementById('reg-module');
-  sel.innerHTML = '<option value="">Select module…</option>';
-  (getCourses()[course] || []).forEach(m => {
-    const opt = document.createElement('option');
-    opt.value = m; opt.textContent = m; sel.appendChild(opt);
-  });
-}
+// kept for any legacy calls — no longer used in the form
+function updateRegModules() {}
 
 const idConfigs = {
   id: {
@@ -370,16 +366,18 @@ async function handleRegister(e) {
   const email      = document.getElementById('email').value.trim();
   const identifier = document.getElementById('identifier').value.trim();
   const course     = document.getElementById('reg-course').value;
-  const module     = document.getElementById('reg-module').value;
 
   if (!fname || !lname || !identifier) {
     showRegAlert('Please fill in all required fields.', 'danger');
     return;
   }
-  if (!course || !module) {
-    showRegAlert('Please select your course and module.', 'danger');
+  if (!course) {
+    showRegAlert('Please select your course.', 'danger');
     return;
   }
+
+  // All modules under the selected course are auto-assigned
+  const modules = getCourses()[course] || [];
 
   // Check for duplicate in localStorage (offline-first)
   const students  = Store.get('gcc_students', []);
@@ -401,7 +399,7 @@ async function handleRegister(e) {
 
   const student = {
     id: generatedStudentId, fname, lname, email, identifier,
-    idType: currentIdType, course, module,
+    idType: currentIdType, course, modules,
     registeredAt: new Date().toISOString()
   };
 
@@ -421,7 +419,7 @@ async function handleRegister(e) {
     obj.set('identifier', identifier);
     obj.set('idType', currentIdType);
     obj.set('course', course);
-    obj.set('module', module);
+    obj.set('modules', modules);
     await obj.save();
   } catch (err) {
     // Non-fatal: data is already in localStorage
@@ -456,6 +454,48 @@ function showRegSuccess() {
   document.getElementById('step-1').classList.replace('active', 'done');
   document.getElementById('step-2').classList.add('done');
   document.getElementById('step-3').classList.add('active');
+
+  // Populate the ID copy box
+  const idBox = document.getElementById('success-student-id');
+  if (idBox) idBox.textContent = generatedStudentId;
+}
+
+function copyStudentId() {
+  // Works on register page (generatedStudentId) and student dashboard (session)
+  let id = null;
+
+  if (typeof generatedStudentId !== 'undefined' && generatedStudentId) {
+    id = generatedStudentId;
+  } else {
+    const session = getStudentSession();
+    if (session) id = session.studentId;
+    // Also check the badge on the student dashboard
+    const badge = document.getElementById('s-id-badge');
+    if (!id && badge) id = badge.textContent.trim();
+  }
+
+  if (!id) { showToast('No Student ID found.', 'danger'); return; }
+
+  navigator.clipboard.writeText(id).then(() => {
+    showToast('Student ID copied to clipboard!', 'success');
+    // Visual feedback on the copy button
+    const btn = document.getElementById('copy-id-btn');
+    if (btn) {
+      btn.innerHTML = '<i class="ph ph-check"></i>';
+      setTimeout(() => { btn.innerHTML = '<i class="ph ph-copy"></i>'; }, 2000);
+    }
+  }).catch(() => {
+    // Fallback for browsers that block clipboard
+    const ta = document.createElement('textarea');
+    ta.value = id;
+    ta.style.position = 'fixed';
+    ta.style.opacity  = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    showToast('Student ID copied!', 'success');
+  });
 }
 
 function downloadQR() {
@@ -683,7 +723,7 @@ function renderStudents(students) {
       <div class="student-info">
         <div class="name">${s.fname} ${s.lname}</div>
         <div class="meta">
-          ${s.course ? `<span style="color:var(--primary);font-weight:600">${s.course}</span> &bull; ${s.module} &bull; ` : ''}
+          ${s.course ? `<span style="color:var(--primary);font-weight:600">${s.course}</span> &bull; ` : ''}
           ${s.email || 'No email'} &bull; Registered ${new Date(s.registeredAt).toLocaleDateString()}
         </div>
       </div>
@@ -1113,9 +1153,11 @@ function renderStudentModuleCards(student, myAtt, allAtt) {
     byModule[r.module].records.push(r);
   });
 
-  // If no records yet, show the registered module at least
-  if (!Object.keys(byModule).length && student.module) {
-    byModule[student.module] = { course: student.course, records: [] };
+  // If no records yet, show all registered modules at least
+  if (!Object.keys(byModule).length && student.modules && student.modules.length) {
+    student.modules.forEach(m => {
+      byModule[m] = { course: student.course, records: [] };
+    });
   }
 
   if (!Object.keys(byModule).length) {

@@ -84,9 +84,13 @@
       <h1 id="s-welcome">Loading…</h1>
       <p id="s-subtitle">Your attendance overview</p>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <span class="badge badge-primary" id="s-course-badge" style="font-size:.8125rem;padding:6px 14px"></span>
       <span class="badge badge-neutral" id="s-id-badge" style="font-size:.75rem;padding:6px 14px;font-family:monospace"></span>
+      <button class="btn btn-ghost btn-sm" onclick="copyStudentId()" title="Copy your Student ID"
+        style="padding:6px 10px">
+        <i class="ph ph-copy"></i> Copy ID
+      </button>
     </div>
   </div>
 
