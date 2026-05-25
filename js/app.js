@@ -585,57 +585,81 @@ function initDashboard() {
   document.getElementById('sel-date').value = todayISO();
   populateCourseDropdown();
   loadSessionConfig();
-
-  // Sync everything from Back4App, then render
-  Promise.all([
-    syncStudentsFromParse(),
-    syncAllAttendanceFromParse()
-  ]).then(() => {
-    loadStats();
-    loadAttendance();
-    loadStudents();
-  });
+  refreshDashboard();
 }
 
-/** Pull ALL attendance records from Back4App into localStorage */
-async function syncAllAttendanceFromParse() {
+async function refreshDashboard() {
   try {
-    const response = await fetch(
-      GCC_CONFIG.parse.serverURL + '/classes/Attendance?limit=1000&order=-createdAt',
-      {
-        headers: {
-          'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
-          'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey
-        }
-      }
-    );
-    if (!response.ok) return;
-    const data = await response.json();
-    if (!data.results || !data.results.length) return;
-
-    // Merge into localStorage using ts as dedup key
-    const local  = Store.get('gcc_attendance', []);
-    const tsSet  = new Set(local.map(r => r.ts));
-    let added = 0;
-
-    data.results.forEach(r => {
-      if (!r.studentId || tsSet.has(r.ts)) return;
-      local.push({
-        studentId: r.studentId,
-        name:      r.name   || '',
-        module:    r.module || '',
-        course:    r.course || '',
-        date:      r.date   || '',
-        time:      r.time   || '',
-        ts:        r.ts     || r.createdAt
-      });
-      added++;
-    });
-
-    if (added) Store.set('gcc_attendance', local);
+    const [students, attendance] = await Promise.all([fetchStudents(), fetchAttendance()]);
+    allStudents  = students;
+    allAttendance = attendance;
+    renderStats(students, attendance);
+    renderAttendance(attendance);
+    renderStudents(students);
+    buildModuleFilter(attendance);
   } catch (err) {
-    console.warn('Attendance sync failed:', err.message);
+    showToast('Failed to load data. Check your connection.', 'danger');
+    console.error(err);
   }
+}
+
+function renderStats(students, attendance) {
+  const today      = todayISO();
+  const presentIds = [...new Set(attendance.filter(r => r.date === today).map(r => r.studentId))];
+  document.getElementById('stat-students').textContent = students.length;
+  document.getElementById('stat-present').textContent  = presentIds.length;
+  document.getElementById('stat-sessions').textContent =
+    [...new Set(attendance.map(r => r.date + r.module))].length;
+  document.getElementById('stat-absent').textContent   =
+    Math.max(0, students.length - presentIds.length);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BACK4APP — DIRECT DATA LAYER (no localStorage for students/attendance)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const API = {
+  headers() {
+    return {
+      'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
+      'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey,
+      'Content-Type':           'application/json'
+    };
+  },
+  async get(path) {
+    const r = await fetch(GCC_CONFIG.parse.serverURL + path, { headers: this.headers() });
+    return r.json();
+  },
+  async post(path, body) {
+    const r = await fetch(GCC_CONFIG.parse.serverURL + path, {
+      method: 'POST', headers: this.headers(), body: JSON.stringify(body)
+    });
+    return r.json();
+  },
+  async del(path) {
+    await fetch(GCC_CONFIG.parse.serverURL + path, { method: 'DELETE', headers: this.headers() });
+  }
+};
+
+async function fetchStudents() {
+  const data = await API.get('/classes/Student?limit=1000&order=fname');
+  return (data.results || []).map(r => ({
+    id: r.studentId, objectId: r.objectId,
+    fname: r.fname || '', lname: r.lname || '',
+    email: r.email || '', identifier: r.identifier || '',
+    idType: r.idType || 'id', course: r.course || '',
+    modules: r.modules || [], registeredAt: r.createdAt
+  }));
+}
+
+async function fetchAttendance() {
+  const data = await API.get('/classes/Attendance?limit=1000&order=-date');
+  return (data.results || []).map(r => ({
+    objectId: r.objectId, studentId: r.studentId,
+    name: r.name || '', module: r.module || '',
+    course: r.course || '', date: r.date || '',
+    time: r.time || '', ts: r.ts || r.createdAt
+  }));
 }
 
 function updateModules() {
@@ -694,25 +718,10 @@ function setSessionBadge(active, s) {
   }
 }
 
-function loadStats() {
-  const students   = Store.get('gcc_students', []);
-  const attendance = Store.get('gcc_attendance', []);
-  const today      = todayISO();
-  const presentIds = [...new Set(attendance.filter(r => r.date === today).map(r => r.studentId))];
-  document.getElementById('stat-students').textContent = students.length;
-  document.getElementById('stat-present').textContent  = presentIds.length;
-  document.getElementById('stat-sessions').textContent =
-    [...new Set(attendance.map(r => r.date + r.module))].length;
-  document.getElementById('stat-absent').textContent   =
-    Math.max(0, students.length - presentIds.length);
-}
-
 let allAttendance = [];
 
-function loadAttendance() {
-  allAttendance = Store.get('gcc_attendance', []);
-  renderAttendance(allAttendance);
-  const modules = [...new Set(allAttendance.map(r => r.module))];
+function buildModuleFilter(attendance) {
+  const modules = [...new Set(attendance.map(r => r.module))];
   const sel = document.getElementById('module-filter');
   sel.innerHTML = '<option value="">All Modules</option>';
   modules.forEach(m => {
@@ -759,10 +768,8 @@ function filterByModule(mod) {
   renderAttendance(mod ? allAttendance.filter(r => r.module === mod) : allAttendance);
 }
 
-let allStudents = [];
-
 function loadStudents() {
-  allStudents = Store.get('gcc_students', []);
+  // kept for compatibility — refreshDashboard sets allStudents directly
   renderStudents(allStudents);
 }
 
@@ -799,36 +806,18 @@ function filterStudents(q) {
 async function deleteStudent(id) {
   if (!confirm('Remove this student? Their attendance records will remain.')) return;
 
-  // Remove from localStorage
-  Store.set('gcc_students', Store.get('gcc_students', []).filter(s => s.id !== id));
-  loadStudents(); loadStats();
-  showToast('Student removed.', 'info');
-
-  // Remove from Back4App — find the object by studentId field then delete it
   try {
-    const findRes = await fetch(
-      GCC_CONFIG.parse.serverURL + '/classes/Student?where=' +
-        encodeURIComponent(JSON.stringify({ studentId: id })),
-      {
-        headers: {
-          'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
-          'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey
-        }
-      }
+    const findData = await API.get(
+      '/classes/Student?where=' + encodeURIComponent(JSON.stringify({ studentId: id }))
     );
-    const findData = await findRes.json();
-    if (!findData.results || !findData.results.length) return;
-
-    const objectId = findData.results[0].objectId;
-    await fetch(GCC_CONFIG.parse.serverURL + '/classes/Student/' + objectId, {
-      method: 'DELETE',
-      headers: {
-        'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
-        'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey
-      }
-    });
+    if (findData.results && findData.results.length) {
+      await API.del('/classes/Student/' + findData.results[0].objectId);
+    }
+    showToast('Student deleted.', 'success');
+    refreshDashboard();
   } catch (err) {
-    console.warn('Failed to delete student from Back4App:', err.message);
+    showToast('Delete failed. Try again.', 'danger');
+    console.error(err);
   }
 }
 
@@ -856,18 +845,29 @@ function exportStudentsJSON() {
   showToast('Students exported.', 'success');
 }
 
-function clearAttendance() {
-  if (!confirm('Clear all attendance records? This cannot be undone.')) return;
-  Store.remove('gcc_attendance');
-  allAttendance = []; renderAttendance([]); loadStats();
-  showToast('Attendance records cleared.', 'info');
+async function clearAttendance() {
+  if (!confirm('Clear ALL attendance records? This cannot be undone.')) return;
+  try {
+    const data = await API.get('/classes/Attendance?limit=1000&keys=objectId');
+    await Promise.all((data.results || []).map(r => API.del('/classes/Attendance/' + r.objectId)));
+    allAttendance = [];
+    renderAttendance([]);
+    renderStats(allStudents, []);
+    buildModuleFilter([]);
+    showToast('Attendance records cleared.', 'info');
+  } catch (err) { showToast('Failed to clear attendance.', 'danger'); }
 }
 
-function clearStudents() {
+async function clearStudents() {
   if (!confirm('Remove ALL registered students? This cannot be undone.')) return;
-  Store.remove('gcc_students');
-  allStudents = []; renderStudents([]); loadStats();
-  showToast('All students removed.', 'info');
+  try {
+    const data = await API.get('/classes/Student?limit=1000&keys=objectId');
+    await Promise.all((data.results || []).map(r => API.del('/classes/Student/' + r.objectId)));
+    allStudents = [];
+    renderStudents([]);
+    renderStats([], allAttendance);
+    showToast('All students removed.', 'info');
+  } catch (err) { showToast('Failed to clear students.', 'danger'); }
 }
 
 function switchTab(name) {
@@ -1015,7 +1015,8 @@ function deleteModule(courseName, index) {
 
 let html5QrCode   = null;
 let scannerActive = false;
-let scanPaused    = false;          // debounce — ignore frames while processing
+let scanPaused    = false;
+let scanStudents  = [];   // loaded from Back4App on page init
 const scannedToday = new Set();
 
 function initScanner() {
@@ -1031,15 +1032,19 @@ function initScanner() {
     document.getElementById('no-session-alert').classList.remove('hidden');
   }
 
-  // Disable Start button and show syncing state until students are loaded
   const startBtn = document.getElementById('start-btn');
   startBtn.disabled = true;
   startBtn.innerHTML = '<i class="ph ph-circle-notch" style="animation:spin .8s linear infinite"></i> Syncing…';
 
-  syncStudentsFromParse().then(() => {
+  fetchStudents().then(students => {
+    scanStudents = students;
     startBtn.disabled = false;
     startBtn.innerHTML = '<i class="ph ph-play"></i> Start Camera';
     loadTodayRecords();
+  }).catch(() => {
+    startBtn.disabled = false;
+    startBtn.innerHTML = '<i class="ph ph-play"></i> Start Camera';
+    showToast('Could not load students. Check connection.', 'danger');
   });
 }
 
@@ -1173,16 +1178,12 @@ function manualMark() {
 }
 
 function processStudentId(id) {
-  // Normalise — strip whitespace and any invisible characters
   id = id.trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
 
   if (scannedToday.has(id)) { showFlash('Already marked present this session.', 'warning'); return; }
 
-  const students = Store.get('gcc_students', []);
-  const student  = students.find(s => s.id === id);
-
+  const student = scanStudents.find(s => s.id === id);
   if (!student) {
-    // Log what was actually scanned to help diagnose mismatches
     console.warn('Scanned ID not found:', JSON.stringify(id));
     showFlash('Student not found — scanned: ' + id, 'error');
     return;
@@ -1192,28 +1193,17 @@ function processStudentId(id) {
   const now = new Date();
   const record = {
     studentId: student.id,
-    name:   student.fname + ' ' + student.lname,
-    module: activeSession ? activeSession.module : 'Unknown',
-    course: activeSession ? activeSession.course : 'Unknown',
-    date:   activeSession ? activeSession.date : todayISO(),
-    time:   formatTime(now),
-    ts:     now.toISOString()
+    name:      student.fname + ' ' + student.lname,
+    module:    activeSession ? activeSession.module : 'Unknown',
+    course:    activeSession ? activeSession.course : 'Unknown',
+    date:      activeSession ? activeSession.date   : todayISO(),
+    time:      formatTime(now),
+    ts:        now.toISOString()
   };
 
-  const attendance = Store.get('gcc_attendance', []);
-  attendance.push(record);
-  Store.set('gcc_attendance', attendance);
-
-  // Save to Back4App so the student can see it on their dashboard
-  fetch(GCC_CONFIG.parse.serverURL + '/classes/Attendance', {
-    method: 'POST',
-    headers: {
-      'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
-      'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey,
-      'Content-Type':           'application/json'
-    },
-    body: JSON.stringify(record)
-  }).catch(err => console.warn('Attendance sync failed:', err.message));
+  // Save directly to Back4App — no localStorage
+  API.post('/classes/Attendance', record)
+    .catch(err => console.warn('Attendance save failed:', err.message));
 
   scannedToday.add(id);
   addToScanList(record);
@@ -1241,34 +1231,52 @@ function addToScanList(record) {
 }
 
 function updateScanSummary() {
-  const students = Store.get('gcc_students', []);
   document.getElementById('sum-present').textContent = scannedToday.size;
-  document.getElementById('sum-absent').textContent  = Math.max(0, students.length - scannedToday.size);
+  document.getElementById('sum-absent').textContent  = Math.max(0, scanStudents.length - scannedToday.size);
 }
 
-function loadTodayRecords() {
+async function loadTodayRecords() {
   const activeSession = Store.get('gcc_active_session');
-  const today = activeSession ? activeSession.date : todayISO();
-  const attendance = Store.get('gcc_attendance', []);
-  attendance
-    .filter(r => r.date === today && (!activeSession || r.module === activeSession.module))
-    .forEach(r => { scannedToday.add(r.studentId); addToScanList(r); });
-  updateScanSummary();
+  const today  = activeSession ? activeSession.date : todayISO();
+  const module = activeSession ? activeSession.module : null;
+
+  try {
+    const where = { date: today };
+    if (module) where.module = module;
+    const data = await API.get(
+      '/classes/Attendance?where=' + encodeURIComponent(JSON.stringify(where)) + '&limit=500'
+    );
+    (data.results || []).forEach(r => {
+      if (scannedToday.has(r.studentId)) return;
+      scannedToday.add(r.studentId);
+      addToScanList({
+        name: r.name, time: r.time, studentId: r.studentId
+      });
+    });
+    updateScanSummary();
+  } catch (err) {
+    console.warn('Could not load today records:', err.message);
+  }
 }
 
-function exportScanCSV() {
+async function exportScanCSV() {
   const activeSession = Store.get('gcc_active_session');
-  const attendance    = Store.get('gcc_attendance', []);
-  const records = activeSession
-    ? attendance.filter(r => r.module === activeSession.module && r.date === activeSession.date)
-    : attendance;
-  if (!records.length) { showToast('No records to export.', 'danger'); return; }
-  const header = 'Name,Student ID,Module,Date,Time\n';
-  const rows   = records.map(r =>
-    `"${r.name}","${r.studentId}","${r.module}","${r.date}","${r.time}"`).join('\n');
-  const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
-  saveAs(blob, `attendance-${activeSession ? activeSession.module + '-' : ''}${todayISO()}.csv`);
-  showToast('CSV exported.', 'success');
+  try {
+    const where = activeSession
+      ? { module: activeSession.module, date: activeSession.date }
+      : {};
+    const data = await API.get(
+      '/classes/Attendance?where=' + encodeURIComponent(JSON.stringify(where)) + '&limit=1000'
+    );
+    const records = data.results || [];
+    if (!records.length) { showToast('No records to export.', 'danger'); return; }
+    const header = 'Name,Student ID,Module,Date,Time\n';
+    const rows   = records.map(r =>
+      `"${r.name}","${r.studentId}","${r.module}","${r.date}","${r.time}"`).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+    saveAs(blob, `attendance-${activeSession ? activeSession.module + '-' : ''}${todayISO()}.csv`);
+    showToast('CSV exported.', 'success');
+  } catch (err) { showToast('Export failed.', 'danger'); }
 }
 
 function clearScanList() {
