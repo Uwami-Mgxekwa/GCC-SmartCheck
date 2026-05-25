@@ -132,6 +132,10 @@
           <i class="ph ph-student"></i> Student
         </button>
       </div>
+      <!-- Lecturer-only note -->
+      <p id="lecturer-note" style="font-size:.8125rem;color:var(--text-muted);margin-bottom:16px">
+        Lecturer accounts are managed by the administrator. Contact your admin if you cannot log in.
+      </p>
 
       <div id="login-alert" class="hidden"></div>
 
@@ -157,14 +161,15 @@
         </button>
       </form>
 
-      <div class="divider">or</div>
-
-      <a href="pages/register.html" class="btn btn-ghost btn-block">
-        <i class="ph ph-user-plus"></i> Register as a Student
-      </a>
-
-      <div class="auth-footer">
-        New student? <a href="pages/register.html">Create your account</a>
+      <!-- Only shown when Student tab is active -->
+      <div id="register-shortcut" style="display:none">
+        <div class="divider">or</div>
+        <a href="pages/register.html" class="btn btn-ghost btn-block">
+          <i class="ph ph-user-plus"></i> Register as a Student
+        </a>
+        <div class="auth-footer">
+          New student? <a href="pages/register.html">Create your account</a>
+        </div>
       </div>
     </div>
   </div>
@@ -172,6 +177,9 @@
 </div>
 
 <div id="toast-container"></div>
+<!-- Parse SDK (Back4App authentication) -->
+<script src="https://unpkg.com/parse/dist/parse.min.js"></script>
+<script src="js/config.js"></script>
 <script src="js/app.js"></script>
 <script>
   window.currentRole = 'lecturer';
