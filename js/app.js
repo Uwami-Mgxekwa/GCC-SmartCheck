@@ -108,9 +108,15 @@ function initLogin() {
   initParse();
   if (!document.getElementById('login-form')) return;
 
-  // Already logged in → go straight to dashboard
+  // Already logged in as lecturer → dashboard
   if (isLoggedIn()) {
     window.location.href = 'pages/dashboard.html';
+    return;
+  }
+
+  // Already logged in as student → student dashboard
+  if (getStudentSession()) {
+    window.location.href = 'pages/student-dashboard.html';
     return;
   }
 
@@ -121,25 +127,22 @@ function switchRole(role) {
   document.getElementById('tab-lecturer').classList.toggle('active', role === 'lecturer');
   document.getElementById('tab-student').classList.toggle('active', role === 'student');
 
-  // Username field and login form only shown for lecturer
-  const usernameGroup = document.getElementById('username-group');
-  const loginForm     = document.getElementById('login-form');
-  const lecturerNote  = document.getElementById('lecturer-note');
+  const loginForm        = document.getElementById('login-form');
+  const studentLoginForm = document.getElementById('student-login-form');
+  const lecturerNote     = document.getElementById('lecturer-note');
+  const registerBtn      = document.getElementById('register-shortcut');
 
   if (role === 'student') {
-    // Students don't log in — they register
-    usernameGroup.style.display = 'none';
-    if (loginForm)    loginForm.style.display    = 'none';
-    if (lecturerNote) lecturerNote.style.display = 'none';
+    if (loginForm)        loginForm.style.display        = 'none';
+    if (studentLoginForm) studentLoginForm.style.display = 'block';
+    if (lecturerNote)     lecturerNote.style.display     = 'none';
+    if (registerBtn)      registerBtn.style.display      = 'block';
   } else {
-    usernameGroup.style.display = 'block';
-    if (loginForm)    loginForm.style.display    = 'block';
-    if (lecturerNote) lecturerNote.style.display = 'block';
+    if (loginForm)        loginForm.style.display        = 'block';
+    if (studentLoginForm) studentLoginForm.style.display = 'none';
+    if (lecturerNote)     lecturerNote.style.display     = 'block';
+    if (registerBtn)      registerBtn.style.display      = 'none';
   }
-
-  // Show/hide the register shortcut
-  const registerBtn = document.getElementById('register-shortcut');
-  if (registerBtn) registerBtn.style.display = role === 'lecturer' ? 'none' : 'block';
 
   clearLoginAlert();
 }
@@ -235,11 +238,100 @@ function clearLoginAlert() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// STUDENT LOGIN
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toggleStudentIdentifier() {
+  const inp  = document.getElementById('student-identifier');
+  const icon = document.getElementById('toggle-sid');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    icon.className = 'ph ph-eye-slash input-icon-right';
+  } else {
+    inp.type = 'password';
+    icon.className = 'ph ph-eye input-icon-right';
+  }
+}
+
+function handleStudentLogin(e) {
+  e.preventDefault();
+  const btn        = document.getElementById('student-login-btn');
+  const studentId  = document.getElementById('student-id-input').value.trim();
+  const identifier = document.getElementById('student-identifier').value.trim();
+
+  if (!studentId || !identifier) {
+    showLoginAlert('Please fill in both fields.', 'danger');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ph ph-circle-notch" style="animation:spin .8s linear infinite"></i> Signing in…';
+
+  // Look up student in localStorage
+  const students = Store.get('gcc_students', []);
+  const student  = students.find(s =>
+    s.id === studentId && s.identifier === identifier
+  );
+
+  if (!student) {
+    showLoginAlert('Student ID or identifier not found. Check your details and try again.', 'danger');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ph ph-sign-in"></i> Sign In';
+    return;
+  }
+
+  // Save student session
+  Store.set('gcc_student_session', {
+    role:      'student',
+    studentId: student.id,
+    name:      student.fname + ' ' + student.lname,
+    course:    student.course || '',
+    module:    student.module || '',
+    ts:        Date.now()
+  });
+
+  showToast('Welcome, ' + student.fname + '!', 'success');
+  setTimeout(() => { window.location.href = 'pages/student-dashboard.html'; }, 800);
+}
+
+function getStudentSession() {
+  const s = Store.get('gcc_student_session');
+  return s && (Date.now() - s.ts) < 8 * 60 * 60 * 1000 ? s : null;
+}
+
+function studentLogout() {
+  Store.remove('gcc_student_session');
+  window.location.href = '../index.html';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // REGISTER PAGE  (pages/register.html)
 // ─────────────────────────────────────────────────────────────────────────────
 
 let currentIdType = 'id';
 let generatedStudentId = null;
+
+function initRegister() {
+  // Populate course dropdown from the lecturer's saved courses
+  const courses = getCourses();
+  const sel = document.getElementById('reg-course');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Select course…</option>';
+  Object.keys(courses).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c; sel.appendChild(opt);
+  });
+}
+
+function updateRegModules() {
+  const course  = document.getElementById('reg-course').value;
+  const sel     = document.getElementById('reg-module');
+  sel.innerHTML = '<option value="">Select module…</option>';
+  (getCourses()[course] || []).forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m; sel.appendChild(opt);
+  });
+}
 
 const idConfigs = {
   id: {
@@ -277,9 +369,15 @@ async function handleRegister(e) {
   const lname      = document.getElementById('lname').value.trim();
   const email      = document.getElementById('email').value.trim();
   const identifier = document.getElementById('identifier').value.trim();
+  const course     = document.getElementById('reg-course').value;
+  const module     = document.getElementById('reg-module').value;
 
   if (!fname || !lname || !identifier) {
     showRegAlert('Please fill in all required fields.', 'danger');
+    return;
+  }
+  if (!course || !module) {
+    showRegAlert('Please select your course and module.', 'danger');
     return;
   }
 
@@ -303,7 +401,8 @@ async function handleRegister(e) {
 
   const student = {
     id: generatedStudentId, fname, lname, email, identifier,
-    idType: currentIdType, registeredAt: new Date().toISOString()
+    idType: currentIdType, course, module,
+    registeredAt: new Date().toISOString()
   };
 
   // Save locally
@@ -321,6 +420,8 @@ async function handleRegister(e) {
     obj.set('email', email || '');
     obj.set('identifier', identifier);
     obj.set('idType', currentIdType);
+    obj.set('course', course);
+    obj.set('module', module);
     await obj.save();
   } catch (err) {
     // Non-fatal: data is already in localStorage
@@ -581,7 +682,10 @@ function renderStudents(students) {
       <div class="student-avatar">${s.fname.charAt(0).toUpperCase()}</div>
       <div class="student-info">
         <div class="name">${s.fname} ${s.lname}</div>
-        <div class="meta">${s.email || 'No email'} &bull; Registered ${new Date(s.registeredAt).toLocaleDateString()}</div>
+        <div class="meta">
+          ${s.course ? `<span style="color:var(--primary);font-weight:600">${s.course}</span> &bull; ${s.module} &bull; ` : ''}
+          ${s.email || 'No email'} &bull; Registered ${new Date(s.registeredAt).toLocaleDateString()}
+        </div>
       </div>
       <code style="font-size:.7rem;color:var(--text-muted)">${s.id}</code>
       <button class="btn btn-ghost btn-sm" onclick="deleteStudent('${s.id}')">
@@ -949,4 +1053,168 @@ function showFlash(msg, type) {
     el.style.animation = 'fadeOut .3s ease forwards';
     setTimeout(() => el.remove(), 300);
   }, 2500);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STUDENT DASHBOARD  (pages/student-dashboard.html)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function initStudentDashboard() {
+  const session = getStudentSession();
+  if (!session) { window.location.href = '../index.html'; return; }
+
+  const students = Store.get('gcc_students', []);
+  const student  = students.find(s => s.id === session.studentId);
+  if (!student)  { window.location.href = '../index.html'; return; }
+
+  // Header
+  document.getElementById('s-welcome').textContent   = 'Hi, ' + student.fname + ' 👋';
+  document.getElementById('s-subtitle').textContent  = 'Here\'s your attendance overview';
+  document.getElementById('s-course-badge').textContent = student.course || 'No course';
+  document.getElementById('s-id-badge').textContent  = student.id;
+
+  // Get all attendance records for this student
+  const allAtt = Store.get('gcc_attendance', []);
+  const myAtt  = allAtt.filter(r => r.studentId === student.id);
+
+  // Overall stats — count unique sessions (date+module) as total possible
+  // We use total sessions recorded for the student's module as denominator
+  const myModules = [...new Set(myAtt.map(r => r.module))];
+  const allSessions = allAtt.filter(r =>
+    myModules.includes(r.module)
+  );
+  const totalUniqueSessions = [...new Set(allSessions.map(r => r.date + '|' + r.module))].length;
+  const attended = myAtt.length;
+  const missed   = Math.max(0, totalUniqueSessions - attended);
+  const rate     = totalUniqueSessions > 0
+    ? Math.round((attended / totalUniqueSessions) * 100) : null;
+
+  document.getElementById('s-stat-present').textContent = attended;
+  document.getElementById('s-stat-absent').textContent  = missed;
+  document.getElementById('s-stat-rate').textContent    = rate !== null ? rate + '%' : '—';
+
+  // Module breakdown cards
+  renderStudentModuleCards(student, myAtt, allAtt);
+
+  // History table
+  renderStudentHistory(myAtt);
+
+  // QR code
+  renderStudentQR(student);
+}
+
+function renderStudentModuleCards(student, myAtt, allAtt) {
+  const grid = document.getElementById('module-grid');
+
+  // Group student's attendance by module
+  const byModule = {};
+  myAtt.forEach(r => {
+    if (!byModule[r.module]) byModule[r.module] = { course: r.course, records: [] };
+    byModule[r.module].records.push(r);
+  });
+
+  // If no records yet, show the registered module at least
+  if (!Object.keys(byModule).length && student.module) {
+    byModule[student.module] = { course: student.course, records: [] };
+  }
+
+  if (!Object.keys(byModule).length) {
+    grid.innerHTML = `<div class="empty-state">
+      <i class="ph ph-chalkboard"></i>
+      <p>No attendance records yet. Attend a class to see your stats here.</p>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = Object.entries(byModule).map(([mod, data]) => {
+    // Total sessions held for this module
+    const totalSessions = [...new Set(
+      allAtt.filter(r => r.module === mod).map(r => r.date)
+    )].length;
+    const attended = data.records.length;
+    const pct      = totalSessions > 0 ? Math.round((attended / totalSessions) * 100) : 0;
+    const barClass = pct >= 80 ? 'good' : pct >= 60 ? 'warning' : 'danger';
+    const badgeClass = pct >= 80 ? 'badge-success' : pct >= 60 ? 'badge-warning' : 'badge-danger';
+
+    return `
+      <div class="module-att-card">
+        <h3>${mod}</h3>
+        <span class="course-tag"><i class="ph ph-books"></i> ${data.course || student.course || '—'}</span>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:.8125rem;color:var(--text-muted)">${attended} of ${totalSessions} classes</span>
+          <span class="badge ${badgeClass}">${pct}%</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar ${barClass}" style="width:${pct}%"></div>
+        </div>
+        <div class="progress-label">
+          <span>0%</span><span>80% required</span><span>100%</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderStudentHistory(records) {
+  const tbody = document.getElementById('s-history-tbody');
+  const count = document.getElementById('s-history-count');
+  count.textContent = records.length + ' record' + (records.length !== 1 ? 's' : '');
+
+  if (!records.length) {
+    tbody.innerHTML = `<tr><td colspan="4">
+      <div class="empty-state" style="padding:32px">
+        <i class="ph ph-clock-counter-clockwise"></i>
+        <p>No attendance history yet.</p>
+      </div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = [...records].reverse().map(r => `
+    <tr>
+      <td><span class="badge badge-primary">${r.module}</span></td>
+      <td>${r.date}</td>
+      <td>${r.time}</td>
+      <td><span class="badge badge-success"><i class="ph ph-check"></i> Present</span></td>
+    </tr>`).join('');
+}
+
+let studentQRInstance = null;
+
+function renderStudentQR(student) {
+  const wrap = document.getElementById('student-qr-canvas');
+  wrap.innerHTML = '';
+  studentQRInstance = new QRCode(wrap, {
+    text: student.id, width: 180, height: 180,
+    colorDark: '#0f172a', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.H
+  });
+}
+
+function downloadStudentQR() {
+  const canvas = document.querySelector('#student-qr-canvas canvas');
+  if (!canvas) return;
+  const session = getStudentSession();
+  const link = document.createElement('a');
+  link.download = (session ? session.studentId : 'student') + '-qr.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  showToast('QR code downloaded.', 'success');
+}
+
+function printStudentQR() {
+  const canvas = document.querySelector('#student-qr-canvas canvas');
+  if (!canvas) return;
+  const session = getStudentSession();
+  const win = window.open('', '_blank');
+  win.document.write(`<html><head><title>GCC SmartCheck QR</title>
+    <style>body{font-family:sans-serif;text-align:center;padding:40px}
+    h2{margin-bottom:4px}p{color:#64748b;margin-bottom:24px}
+    .id{font-family:monospace;font-size:.75rem;color:#94a3b8;margin-top:8px}</style>
+    </head><body>
+    <h2>${session ? session.name : 'Student'}</h2>
+    <p>GCC SmartCheck — Attendance QR Code</p>
+    <img src="${canvas.toDataURL()}" style="width:220px;height:220px;border-radius:8px"/>
+    <div class="id">${session ? session.studentId : ''}</div>
+    </body></html>`);
+  win.document.close();
+  win.print();
 }

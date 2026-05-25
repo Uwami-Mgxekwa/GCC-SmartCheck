@@ -139,6 +139,7 @@
 
       <div id="login-alert" class="hidden"></div>
 
+      <!-- Lecturer login form -->
       <form id="login-form" onsubmit="handleLogin(event)">
         <div class="form-group" id="username-group">
           <label class="form-label">Username</label>
@@ -155,8 +156,33 @@
             <i class="ph ph-eye input-icon-right" id="toggle-pw" onclick="togglePassword()"></i>
           </div>
         </div>
-        <a href="#" class="forgot-link">Forgot password?</a>
         <button type="submit" class="btn btn-primary btn-block btn-lg" id="login-btn">
+          <i class="ph ph-sign-in"></i> Sign In
+        </button>
+      </form>
+
+      <!-- Student login form -->
+      <form id="student-login-form" onsubmit="handleStudentLogin(event)" style="display:none">
+        <div class="form-group">
+          <label class="form-label">Student ID</label>
+          <div class="input-group">
+            <i class="ph ph-identification-badge input-icon"></i>
+            <input type="text" id="student-id-input" class="form-control"
+              placeholder="Your gcc-… ID from your QR code" autocomplete="off" />
+          </div>
+          <p class="form-hint">Find this on your QR code card (starts with gcc-)</p>
+        </div>
+        <div class="form-group">
+          <label class="form-label">ID Number / Passport / Date of Birth</label>
+          <div class="input-group">
+            <i class="ph ph-lock-simple input-icon"></i>
+            <input type="text" id="student-identifier" class="form-control"
+              placeholder="The identifier you registered with" autocomplete="off" />
+            <i class="ph ph-eye input-icon-right" id="toggle-sid" onclick="toggleStudentIdentifier()"></i>
+          </div>
+          <p class="form-hint">Same value you entered when you registered</p>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block btn-lg" id="student-login-btn">
           <i class="ph ph-sign-in"></i> Sign In
         </button>
       </form>
@@ -167,9 +193,6 @@
         <a href="pages/register.html" class="btn btn-ghost btn-block">
           <i class="ph ph-user-plus"></i> Register as a Student
         </a>
-        <div class="auth-footer">
-          New student? <a href="pages/register.html">Create your account</a>
-        </div>
       </div>
     </div>
   </div>
