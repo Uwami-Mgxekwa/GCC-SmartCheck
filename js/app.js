@@ -796,11 +796,40 @@ function filterStudents(q) {
   ));
 }
 
-function deleteStudent(id) {
+async function deleteStudent(id) {
   if (!confirm('Remove this student? Their attendance records will remain.')) return;
+
+  // Remove from localStorage
   Store.set('gcc_students', Store.get('gcc_students', []).filter(s => s.id !== id));
   loadStudents(); loadStats();
   showToast('Student removed.', 'info');
+
+  // Remove from Back4App — find the object by studentId field then delete it
+  try {
+    const findRes = await fetch(
+      GCC_CONFIG.parse.serverURL + '/classes/Student?where=' +
+        encodeURIComponent(JSON.stringify({ studentId: id })),
+      {
+        headers: {
+          'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
+          'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey
+        }
+      }
+    );
+    const findData = await findRes.json();
+    if (!findData.results || !findData.results.length) return;
+
+    const objectId = findData.results[0].objectId;
+    await fetch(GCC_CONFIG.parse.serverURL + '/classes/Student/' + objectId, {
+      method: 'DELETE',
+      headers: {
+        'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
+        'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey
+      }
+    });
+  } catch (err) {
+    console.warn('Failed to delete student from Back4App:', err.message);
+  }
 }
 
 function exportCSV() {
