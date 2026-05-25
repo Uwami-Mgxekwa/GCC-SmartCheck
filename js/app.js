@@ -337,16 +337,12 @@ const idConfigs = {
   passport: {
     label: 'Passport Number', placeholder: 'e.g. A12345678',
     hint: 'Enter your passport number exactly as it appears', icon: 'ph-passport', type: 'text'
-  },
-  dob: {
-    label: 'Date of Birth', placeholder: '',
-    hint: 'Enter your date of birth', icon: 'ph-calendar', type: 'date'
   }
 };
 
 function setIdType(type) {
   currentIdType = type;
-  ['id', 'passport', 'dob'].forEach(t => {
+  ['id', 'passport'].forEach(t => {
     document.getElementById('type-' + t).classList.toggle('active', t === type);
   });
   const cfg = idConfigs[type];
