@@ -947,9 +947,11 @@ function initScanner() {
 }
 
 function startScanner() {
-  // Reset the reader div so html5-qrcode can mount cleanly every time
-  const readerEl = document.getElementById('reader');
-  readerEl.innerHTML = '';
+  // If a previous instance exists, clear it before starting fresh
+  if (html5QrCode) {
+    try { html5QrCode.clear(); } catch(e) {}
+    html5QrCode = null;
+  }
 
   document.getElementById('scanner-idle').style.display = 'none';
   document.getElementById('scan-overlay').classList.remove('hidden');
@@ -964,10 +966,10 @@ function startScanner() {
     { facingMode: 'environment' },
     { fps: 10, qrbox: { width: 220, height: 220 } },
     (decodedText) => {
-      if (scanPaused) return;          // ignore repeat frames
-      scanPaused = true;               // block until flash clears
+      if (scanPaused) return;
+      scanPaused = true;
       processStudentId(decodedText.trim());
-      setTimeout(() => { scanPaused = false; }, 2500); // re-enable after flash duration
+      setTimeout(() => { scanPaused = false; }, 2500);
     },
     () => {}
   ).catch(() => {
@@ -980,7 +982,7 @@ function startScanner() {
 function stopScanner() {
   if (html5QrCode && scannerActive) {
     html5QrCode.stop().then(() => {
-      html5QrCode.clear();
+      try { html5QrCode.clear(); } catch(e) {}
       html5QrCode = null;
     }).catch(() => {
       html5QrCode = null;

@@ -153,12 +153,12 @@
         </div>
       </div>
       <div style="position:relative">
-        <div id="reader">
-          <div class="scanner-idle" id="scanner-idle">
-            <i class="ph ph-camera-slash"></i>
-            <p>Press "Start Camera" to begin scanning</p>
-          </div>
+        <!-- Idle placeholder sits OUTSIDE #reader so the library never wipes it -->
+        <div class="scanner-idle" id="scanner-idle">
+          <i class="ph ph-camera-slash"></i>
+          <p>Press "Start Camera" to begin scanning</p>
         </div>
+        <div id="reader"></div>
         <div class="scan-overlay-wrap hidden" id="scan-overlay">
           <div class="scan-frame-box">
             <div class="corner tl"></div><div class="corner tr"></div>
