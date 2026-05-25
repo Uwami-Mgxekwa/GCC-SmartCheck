@@ -56,6 +56,52 @@
     .student-info .name { font-weight: 600; font-size: .9375rem; }
     .student-info .meta { font-size: .75rem; color: var(--text-muted); }
 
+    /* ── Courses tab ── */
+    .courses-layout { display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start; }
+    .course-card { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); overflow: hidden; }
+    .course-card-header { padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; }
+    .course-card-header h3 { display: flex; align-items: center; gap: 8px; font-size: 1rem; }
+    .course-card-header h3 i { color: var(--primary); }
+    .course-list { padding: 8px; }
+    .course-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+      border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition);
+      border: 1.5px solid transparent; }
+    .course-item:hover { background: var(--surface-2); }
+    .course-item.active { background: var(--primary-light); border-color: #bfdbfe; }
+    .course-item-icon { width: 36px; height: 36px; border-radius: 8px; background: var(--surface-3);
+      display: flex; align-items: center; justify-content: center; font-size: 1rem;
+      color: var(--primary); flex-shrink: 0; }
+    .course-item.active .course-item-icon { background: var(--primary); color: #fff; }
+    .course-item-info { flex: 1; min-width: 0; }
+    .course-item-name { font-weight: 600; font-size: .875rem; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; }
+    .course-item-count { font-size: .75rem; color: var(--text-muted); }
+    .course-item.active .course-item-count { color: var(--primary); }
+
+    .module-panel { background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); overflow: hidden; }
+    .module-panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; }
+    .module-panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 1rem; }
+    .module-panel-header h3 i { color: var(--primary); }
+    .module-list { padding: 12px; }
+    .module-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+      border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 8px;
+      background: var(--surface); transition: var(--transition); }
+    .module-item:hover { box-shadow: var(--shadow-sm); }
+    .module-item-name { flex: 1; font-weight: 500; font-size: .9rem; }
+    .module-add-form { padding: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+    .module-add-form .form-control { flex: 1; }
+
+    .add-course-form { padding: 16px 20px; border-top: 1px solid var(--border); }
+    .add-course-form .form-control { margin-bottom: 10px; }
+
+    @media (max-width: 900px) {
+      .courses-layout { grid-template-columns: 1fr; }
+    }
+
     @media (max-width: 900px) {
       .stat-grid { grid-template-columns: 1fr 1fr; }
       .session-grid { grid-template-columns: 1fr; }
@@ -112,6 +158,7 @@
   <div class="tab-bar">
     <button class="tab-btn active" onclick="switchTab('attendance')"><i class="ph ph-clipboard-text"></i> Attendance</button>
     <button class="tab-btn" onclick="switchTab('session')"><i class="ph ph-gear"></i> Session Setup</button>
+    <button class="tab-btn" onclick="switchTab('courses')"><i class="ph ph-books"></i> Courses</button>
     <button class="tab-btn" onclick="switchTab('students')"><i class="ph ph-users"></i> Students</button>
   </div>
 
