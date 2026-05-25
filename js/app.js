@@ -584,12 +584,58 @@ function initDashboard() {
 
   document.getElementById('sel-date').value = todayISO();
   populateCourseDropdown();
-  loadStats();
-  loadAttendance();
   loadSessionConfig();
 
-  // Sync students from Back4App then render the list
-  syncStudentsFromParse().then(() => loadStudents());
+  // Sync everything from Back4App, then render
+  Promise.all([
+    syncStudentsFromParse(),
+    syncAllAttendanceFromParse()
+  ]).then(() => {
+    loadStats();
+    loadAttendance();
+    loadStudents();
+  });
+}
+
+/** Pull ALL attendance records from Back4App into localStorage */
+async function syncAllAttendanceFromParse() {
+  try {
+    const response = await fetch(
+      GCC_CONFIG.parse.serverURL + '/classes/Attendance?limit=1000&order=-createdAt',
+      {
+        headers: {
+          'X-Parse-Application-Id': GCC_CONFIG.parse.appId,
+          'X-Parse-Master-Key':     GCC_CONFIG.parse.masterKey
+        }
+      }
+    );
+    if (!response.ok) return;
+    const data = await response.json();
+    if (!data.results || !data.results.length) return;
+
+    // Merge into localStorage using ts as dedup key
+    const local  = Store.get('gcc_attendance', []);
+    const tsSet  = new Set(local.map(r => r.ts));
+    let added = 0;
+
+    data.results.forEach(r => {
+      if (!r.studentId || tsSet.has(r.ts)) return;
+      local.push({
+        studentId: r.studentId,
+        name:      r.name   || '',
+        module:    r.module || '',
+        course:    r.course || '',
+        date:      r.date   || '',
+        time:      r.time   || '',
+        ts:        r.ts     || r.createdAt
+      });
+      added++;
+    });
+
+    if (added) Store.set('gcc_attendance', local);
+  } catch (err) {
+    console.warn('Attendance sync failed:', err.message);
+  }
 }
 
 function updateModules() {
