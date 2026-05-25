@@ -927,6 +927,7 @@ function deleteModule(courseName, index) {
 
 let html5QrCode   = null;
 let scannerActive = false;
+let scanPaused    = false;          // debounce — ignore frames while processing
 const scannedToday = new Set();
 
 function initScanner() {
@@ -946,6 +947,10 @@ function initScanner() {
 }
 
 function startScanner() {
+  // Reset the reader div so html5-qrcode can mount cleanly every time
+  const readerEl = document.getElementById('reader');
+  readerEl.innerHTML = '';
+
   document.getElementById('scanner-idle').style.display = 'none';
   document.getElementById('scan-overlay').classList.remove('hidden');
   document.getElementById('start-btn').classList.add('hidden');
@@ -953,11 +958,17 @@ function startScanner() {
   document.getElementById('status-dot').classList.add('active');
   document.getElementById('status-text').textContent = 'Camera active';
 
+  scanPaused = false;
   html5QrCode = new Html5Qrcode('reader');
   html5QrCode.start(
     { facingMode: 'environment' },
     { fps: 10, qrbox: { width: 220, height: 220 } },
-    (decodedText) => processStudentId(decodedText.trim()),
+    (decodedText) => {
+      if (scanPaused) return;          // ignore repeat frames
+      scanPaused = true;               // block until flash clears
+      processStudentId(decodedText.trim());
+      setTimeout(() => { scanPaused = false; }, 2500); // re-enable after flash duration
+    },
     () => {}
   ).catch(() => {
     showFlash('Camera access denied. Use manual entry below.', 'error');
@@ -967,7 +978,16 @@ function startScanner() {
 }
 
 function stopScanner() {
-  if (html5QrCode && scannerActive) { html5QrCode.stop().catch(() => {}); scannerActive = false; }
+  if (html5QrCode && scannerActive) {
+    html5QrCode.stop().then(() => {
+      html5QrCode.clear();
+      html5QrCode = null;
+    }).catch(() => {
+      html5QrCode = null;
+    });
+    scannerActive = false;
+  }
+  scanPaused = false;
   document.getElementById('scanner-idle').style.display = 'flex';
   document.getElementById('scan-overlay').classList.add('hidden');
   document.getElementById('start-btn').classList.remove('hidden');
@@ -984,11 +1004,20 @@ function manualMark() {
 }
 
 function processStudentId(id) {
+  // Normalise — strip whitespace and any invisible characters
+  id = id.trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
+
   if (scannedToday.has(id)) { showFlash('Already marked present this session.', 'warning'); return; }
 
   const students = Store.get('gcc_students', []);
   const student  = students.find(s => s.id === id);
-  if (!student) { showFlash('Student not found. ID: ' + id, 'error'); return; }
+
+  if (!student) {
+    // Log what was actually scanned to help diagnose mismatches
+    console.warn('Scanned ID not found:', JSON.stringify(id));
+    showFlash('Student not found — scanned: ' + id, 'error');
+    return;
+  }
 
   const activeSession = Store.get('gcc_active_session');
   const now = new Date();
